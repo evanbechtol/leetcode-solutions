@@ -1,25 +1,7 @@
 /**
- * @param {string} s
- * @return {number}
+ * @param {number[]} derived
+ * @return {boolean}
  */
-var maxScore = function(s) {
-    let ones = 0;
-    let zeroes = 0;
-    let best = -Infinity;
-
-    for (let i = 0; i < s.length - 1; i++) {
-        if (s[i] === '1') {
-            ones++;
-        } else {
-            zeroes++;
-        }
-
-        best = Math.max(best, zeroes - ones);
-    }
-
-    if (s[s.length - 1] === '1') {
-        ones++;
-    }
-
-    return best + ones;
+var doesValidArrayExist = function(derived) {
+   return !derived.reduce((acc, curr) => acc ^= curr, 0);
 };
