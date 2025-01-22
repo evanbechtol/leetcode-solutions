@@ -36,6 +36,9 @@
  * we start by finding all the cells which are water in "isWater", add them to a queue,
  * and mark their location in cellHeights. Then we iterate over the queue, and for each water cell
  * we update the heights of the neighboring cells. We continue this process until we have visited.
+ * 
+ * Time complexity: O(m * n)
+ * Space complexity: O(m * n)
  * @param {number[][]} isWater
  * @return {number[][]}
  */
