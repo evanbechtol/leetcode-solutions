@@ -54,11 +54,11 @@ var highestPeak = function(isWater) {
     // iterate over every cell in isWater
     // if we encounter a water cell, add it to the cellQueue & mark it as
     // a water cell in cellHeights
-    for (let i = 0; i < m; i++) {
-        for (let j = 0; j < n; j++) {
-            if (isWater[i][j] === 1) {
-                cellQueue.push([i, j]);
-                cellHeights[i][j] = 0;
+    for (let x = 0; x < m; x++) {
+        for (let y = 0; y < n; y++) {
+            if (isWater[x][y] === 1) {
+                cellQueue.push([x, y]);
+                cellHeights[x][y] = 0;
             }
         }
     }
