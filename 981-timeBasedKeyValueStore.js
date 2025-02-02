@@ -8,7 +8,13 @@
  *            indicator for the type of data structure we should use; map.
  *
  * Using this information, we can use a binary search in the 'get'
- * method to determine which data we should return.
+ * method to determine which data we should return. We use the timestamps
+ * to determine which value we should return. 
+ * 
+ * Since we always may need to return the previous value, we need to update 
+ * our return value every time we move the left pointer. This is because the 
+ * left pointer would always be the previous value, in the event that we don't 
+ * find our target timestamp.
  *
  * The data structure is going to be a key/value store with the following structure:
  * key: [value, timestamp]
