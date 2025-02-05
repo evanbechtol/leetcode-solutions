@@ -20,6 +20,7 @@ var search = function (nums, target) {
             if (nums[left] <= target && target <= nums[mid]) {
                 right = mid - 1;
             } else {
+                // target must be in right half
                 left = mid + 1;
             }
         } else {
@@ -28,6 +29,7 @@ var search = function (nums, target) {
             if (nums[mid] <= target && target <= nums[right]) {
                 left = mid + 1;
             } else {
+                // target must be in left half
                 right = mid - 1;
             }
         }
