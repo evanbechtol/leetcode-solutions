@@ -19,7 +19,9 @@ var tupleSameProduct = function (nums) {
     }
 
     for (const [key, value] of products) {
+        // combination formula: C(n, 2) = n * (n - 1) / 2
         const pairsOfEqualProduct = ((value - 1) * value) / 2;
+        // Each pair of indices can form 8 different tuples with the same product.
         result += 8 * pairsOfEqualProduct;
     }
 
