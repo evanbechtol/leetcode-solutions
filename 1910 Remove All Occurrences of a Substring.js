@@ -49,7 +49,7 @@ var removeOccurrences = function (s, part) {
     const lps = buildLPS(part);
     let i = 0; // index for s
     let j = 0; // index for part
-    let result = '';
+    const result = [];
 
     while (i < s.length) {
         if (s[i] === part[j]) {
@@ -57,23 +57,23 @@ var removeOccurrences = function (s, part) {
             j++;
             if (j === part.length) {
                 // Found a match, reset j and remove the matched part from result
-                result = result.slice(0, result.length - part.length + 1);
+                result.length -= part.length - 1;
                 j = 0;
             }
         } else {
             if (j !== 0) {
                 j = lps[j - 1];
             } else {
-                result += s[i];
+                result.push(s[i]);
                 i++;
             }
         }
     }
 
     // Append remaining characters
-    result += s.slice(i);
+    result.push(...s.slice(i));
 
-    return result;
+    return result.join('');
 };
 
 const buildLPS = (pattern) => {
@@ -98,3 +98,9 @@ const buildLPS = (pattern) => {
 
     return lps;
 };
+
+// Test case
+const s = "daabcbaabcbc";
+const part = "abc";
+const result = removeOccurrences(s, part);
+console.log(result); // Expected output: "dab"
