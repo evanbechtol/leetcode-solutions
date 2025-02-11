@@ -24,3 +24,17 @@ var removeOccurrences = function (s, part) {
 const isMatch = (sArr, part) => {
     return sArr.slice(-part.length).join('') === part;
 }
+
+// Approach 2: Using String Replace
+/**
+ * @param {string} s
+ * @param {string} part
+ * @return {string}
+ */
+var removeOccurrences = function (s, part) {
+    while (s.includes(part)) {
+        s = s.replace(part, '');
+    }
+
+    return s;
+};
