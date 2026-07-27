@@ -53,7 +53,7 @@ Constraints:
  */
 class Solution {
     public boolean isValid(String s) {
-        Stack<Character> stack = new Stack<>();
+        Deque<Character> stack = new ArrayDeque<>();
 
         for (char ch : s.toCharArray()) {
             // It's simpler to push the equivalent closing parentheses, because you can do a direct
