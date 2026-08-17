@@ -41,6 +41,26 @@
  * nums is an ascending array that is possibly rotated.
  * -104 <= target <= 104
  */
+
+ /**
+  * 
+Deciding the Sorted Half:
+
+At any point during the search in the rotated array, one half (either the left or the right) will always be sorted. Determining which half is sorted is crucial for our modified binary search.
+
+    If left half [low...mid] is sorted: We know this if the element at low is less than or equal to the element at mid. In a normally sorted array, if the start is less than or equal to the midpoint, it means all elements till the midpoint are in the correct increasing order.
+
+        If the target lies within this sorted left half: We know this if the target is greater than or equal to the element at low and less than the element at mid. If this is the case, we then move our search to this half, meaning, we update high to mid−1.
+
+        Otherwise: The target must be in the right half. So, we update low to mid+1.
+
+    If right half [mid...high] is sorted: This is the else part. If the left half isn't sorted, the right half must be!
+
+        If the target lies within this sorted right half: We know this if the target is greater than the element at mid and less than or equal to the element at high. If so, we move our search to this half by updating low to mid+1.
+
+        Otherwise: The target must be in the left half. So, we update high to mid−1.
+
+  */
 class Solution {
 
     public int search(int[] nums, int target) {
