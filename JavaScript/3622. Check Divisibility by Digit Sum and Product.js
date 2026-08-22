@@ -41,18 +41,10 @@ Since 23 is not divisible by the sum (2 + 3 = 5) plus product (2 * 3 = 6) of its
  * @param {number} n
  * @return {boolean}
  */
-var checkDivisibility = function(n) {
-    let original = n
-    let digitSum = 0;
-    let digitProduct = 1;
-
-    while (n > 0) {
-        const lastDigit = n % 10;
-        n = Math.floor(n / 10);
-
-        digitSum += lastDigit;
-        digitProduct *= lastDigit;
-    }
-
-    return original % (digitSum + digitProduct) === 0;
+const checkDivisibility = (n) => {
+    const digits = Array.from(String(n), Number);
+    const digitSum = digits.reduce((sum, digit) => sum + digit, 0);
+    const digitProduct = digits.reduce((product, digit) => product * digit, 1);
+    
+    return n % (digitSum + digitProduct) === 0;
 };
