@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { problems } from '../data/problems'
 import { useTrainerStore } from '../stores/trainer'
 import type { Difficulty } from '../types'
 
 const store = useTrainerStore()
 const emit = defineEmits<{ close: [] }>()
 const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard']
-const sets = computed(() => [...new Set(problems.flatMap((problem) => problem.set))])
-const topics = computed(() => [...new Set(problems.flatMap((problem) => problem.topics))].sort())
-const algorithms = computed(() => [...new Set(problems.flatMap((problem) => problem.algorithms))].sort())
+const sets = computed(() => [...new Set(store.availableProblems.flatMap((problem) => problem.set))])
+const topics = computed(() => [...new Set(store.availableProblems.flatMap((problem) => problem.topics))].sort())
+const algorithms = computed(() => [...new Set(store.availableProblems.flatMap((problem) => problem.algorithms))].sort())
 
 function clear() {
   store.filters = { difficulties: [], sets: [], topics: [], algorithms: [] }

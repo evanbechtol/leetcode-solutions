@@ -11,6 +11,7 @@ const aiHint = ref('')
 const hintLoading = ref(false)
 const quizLoading = ref(false)
 const quizError = ref('')
+const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
 
 const progress = computed(() => store.currentProblem
   ? ((store.currentQuestionIndex + (store.submitted && store.selectedAnswer === store.currentQuestion?.answer ? 1 : 0)) / Math.max(store.questionCount, 1)) * 100
@@ -28,6 +29,10 @@ async function start() {
 
 async function generateQuiz() {
   if (!store.currentProblem) return
+  if (!aiCoachEnabled) {
+    quizError.value = 'AI-generated lessons are disabled in this development mode.'
+    return
+  }
   quizLoading.value = true
   quizError.value = ''
   try {
@@ -65,6 +70,10 @@ async function checkAnswer() {
   const correct = store.submitAnswer()
   aiHint.value = ''
   if (correct !== false || !store.currentProblem || !store.currentQuestion || store.selectedAnswer === null) return
+  if (!aiCoachEnabled) {
+    aiHint.value = store.currentQuestion.hint
+    return
+  }
   hintLoading.value = true
   try {
     const endpoint = import.meta.env.VITE_HINT_API_URL || 'http://localhost:8787/api/hint'

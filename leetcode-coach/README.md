@@ -9,11 +9,19 @@ npm install
 npm run dev
 ```
 
+The default development command keeps the AI coach disabled and uses only the built-in guided lessons with curated hints. To enable dataset-backed quiz generation and personalized hints, run the frontend in AI mode:
+
+```powershell
+npm.cmd run dev:ai
+```
+
+The equivalent direct flag is `npm.cmd run dev -- --mode ai`.
+
 In a second terminal, enable AI-generated Socratic hints:
 
 ```powershell
 $env:OPENAI_API_KEY="your_key_here"
-npm run hints
+npm.cmd run hints
 ```
 
 The browser never receives the API key. If the local hint service is stopped or unconfigured, the quiz automatically falls back to its curated hint.

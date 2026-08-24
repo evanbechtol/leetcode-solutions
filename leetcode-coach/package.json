@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:ai": "vite --mode ai",
     "hints": "node server/hints.mjs",
     "catalog:import": "node scripts/import-newfacade-dataset.mjs",
     "build": "vue-tsc --noEmit && vite build",

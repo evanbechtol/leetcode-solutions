@@ -5,6 +5,7 @@ import type { AnswerRecord, Filters, ProblemResult, QuestionType, QuizQuestion }
 
 const STORAGE_KEY = 'pathfinder-progress-v1'
 const QUIZ_CACHE_KEY = 'pathfinder-generated-quizzes-v1'
+const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
 
 interface PersistedProgress {
   answers: AnswerRecord[]
@@ -49,7 +50,8 @@ export const useTrainerStore = defineStore('trainer', () => {
   const currentProblem = computed(() => problems.find((problem) => problem.id === currentProblemId.value) ?? null)
   const currentQuestion = computed(() => activeQuestions.value[currentQuestionIndex.value] ?? null)
   const questionCount = computed(() => activeQuestions.value.length)
-  const matchingProblems = computed(() => problems.filter((problem) => {
+  const availableProblems = computed(() => aiCoachEnabled ? problems : problems.filter((problem) => problem.questions.length > 0))
+  const matchingProblems = computed(() => availableProblems.value.filter((problem) => {
     const f = filters.value
     return (!f.difficulties.length || f.difficulties.includes(problem.difficulty))
       && (!f.sets.length || f.sets.some((item) => problem.set.includes(item)))
@@ -149,7 +151,7 @@ export const useTrainerStore = defineStore('trainer', () => {
 
   return {
     answers, results, streak, bestStreak, currentProblemId, currentQuestionIndex, selectedAnswer, submitted,
-    firstTryCorrect, filters, activeQuestions, currentProblem, currentQuestion, questionCount, matchingProblems,
+    firstTryCorrect, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
     totalCorrect, accuracy, completedProblemIds, typeStats, topicMastery, startRandomProblem,
     setGeneratedQuestions, submitAnswer, tryAgain, nextQuestion, resetProgress,
   }
