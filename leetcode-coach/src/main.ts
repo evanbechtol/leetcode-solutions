@@ -34,6 +34,7 @@ const router = createRouter({
   },
   routes: [
     { path: '/', name: 'practice', component: QuizView },
+    { path: '/problems', name: 'problems', component: () => import('./views/ProblemsView.vue') },
     { path: '/problems/:problemId(\\d+)', name: 'problem', component: QuizView },
     { path: '/problems/:pathMatch(.*)*', redirect: { name: 'practice' } },
     { path: '/learn/:slug?', name: 'learn', component: () => import('./views/LearnView.vue') },

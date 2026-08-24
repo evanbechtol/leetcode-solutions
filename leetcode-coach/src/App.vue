@@ -15,6 +15,7 @@ const store = useTrainerStore()
         <v-spacer />
         <nav class="nav-pills" aria-label="Primary navigation">
           <router-link to="/" class="nav-link"><v-icon icon="mdi-compass-outline" size="19" /> Practice</router-link>
+          <router-link to="/problems" class="nav-link"><v-icon icon="mdi-format-list-bulleted" size="19" /> Problems</router-link>
           <router-link to="/learn" class="nav-link"><v-icon icon="mdi-book-open-page-variant-outline" size="19" /> Learn</router-link>
           <router-link to="/cheat-sheet" class="nav-link"><v-icon icon="mdi-notebook-outline" size="19" /> Cheat Sheet</router-link>
           <router-link to="/profile" class="nav-link"><v-icon icon="mdi-chart-donut" size="19" /> Progress</router-link>

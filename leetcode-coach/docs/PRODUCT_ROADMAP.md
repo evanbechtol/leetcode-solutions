@@ -115,6 +115,7 @@ The fifth question presents a six-frame execution trace after the learner has id
 - Syntax-highlighted examples with language selection where samples are available.
 - Searchable and downloadable algorithm cheat sheet.
 - Problem, lesson, cheat-sheet, and profile routes.
+- Searchable Problems catalog with shared difficulty, problem-set, topic, and algorithm filters.
 
 ### Progress and deployment — Complete
 

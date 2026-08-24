@@ -251,6 +251,7 @@ async function copySolution() {
           <p class="hero-subtitle">Turn difficult coding problems into a sequence of decisions you know how to make.</p>
           <div class="d-flex flex-wrap ga-3 mt-8">
             <v-btn color="primary" size="x-large" append-icon="mdi-arrow-right" @click="start">Start a problem</v-btn>
+            <v-btn size="x-large" variant="outlined" prepend-icon="mdi-format-list-bulleted" :to="{ name: 'problems' }">Browse problems</v-btn>
             <v-btn size="x-large" variant="outlined" prepend-icon="mdi-tune-variant" @click="filterOpen = true">
               Choose focus <span v-if="activeFilterCount" class="filter-count ml-2">{{ activeFilterCount }}</span>
             </v-btn>
@@ -277,7 +278,7 @@ async function copySolution() {
     <div v-else class="quiz-layout app-shell px-5 px-md-8 py-7 py-md-10">
       <aside class="problem-panel">
         <div class="d-flex align-center justify-space-between mb-6">
-          <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" :to="{ name: 'practice' }">Problem picker</v-btn>
+          <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" :to="{ name: 'problems' }">All problems</v-btn>
           <v-btn icon="mdi-tune-variant" variant="text" size="small" aria-label="Filters" @click="filterOpen = true" />
         </div>
         <div class="problem-number">LEETCODE / {{ String(store.currentProblem.id).padStart(4, '0') }}</div>
