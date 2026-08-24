@@ -15,6 +15,7 @@ const store = useTrainerStore()
         <v-spacer />
         <nav class="nav-pills" aria-label="Primary navigation">
           <router-link to="/" class="nav-link"><v-icon icon="mdi-compass-outline" size="19" /> Practice</router-link>
+          <router-link to="/learn" class="nav-link"><v-icon icon="mdi-book-open-page-variant-outline" size="19" /> Learn</router-link>
           <router-link to="/profile" class="nav-link"><v-icon icon="mdi-chart-donut" size="19" /> Progress</router-link>
         </nav>
         <div class="streak-pill ml-3 ml-md-6"><span>◆</span> {{ store.streak }} <span class="streak-label">streak</span></div>

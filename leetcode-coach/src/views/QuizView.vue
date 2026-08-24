@@ -1,7 +1,21 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
+import hljs from 'highlight.js/lib/core'
+import typescript from 'highlight.js/lib/languages/typescript'
+import javascript from 'highlight.js/lib/languages/javascript'
+import python from 'highlight.js/lib/languages/python'
+import java from 'highlight.js/lib/languages/java'
+import cpp from 'highlight.js/lib/languages/cpp'
+import rust from 'highlight.js/lib/languages/rust'
 import { useTrainerStore } from '../stores/trainer'
 import FilterPanel from '../components/FilterPanel.vue'
+
+hljs.registerLanguage('typescript', typescript)
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('java', java)
+hljs.registerLanguage('cpp', cpp)
+hljs.registerLanguage('rust', rust)
 
 const store = useTrainerStore()
 const filterOpen = ref(false)
@@ -13,6 +27,7 @@ const quizLoading = ref(false)
 const quizError = ref('')
 const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
 const selectedLanguage = ref('')
+const questionPanel = ref<HTMLElement | null>(null)
 
 const progress = computed(() => store.currentProblem
   ? ((store.currentQuestionIndex + (store.submitted && store.selectedAnswer === store.currentQuestion?.answer ? 1 : 0)) / Math.max(store.questionCount, 1)) * 100
@@ -26,13 +41,37 @@ const codeSamples = computed<Record<string, string>>(() => {
 const solutionLanguages = computed(() => Object.keys(codeSamples.value))
 const activeLanguage = computed(() => selectedLanguage.value || solutionLanguages.value[0] || '')
 const displayedSolution = computed(() => codeSamples.value[activeLanguage.value] || store.currentProblem?.solution || '')
+const highlightLanguage = computed(() => ({
+  Python: 'python',
+  Java: 'java',
+  'C++': 'cpp',
+  Rust: 'rust',
+  TypeScript: 'typescript',
+  JavaScript: 'javascript',
+}[activeLanguage.value] || 'typescript'))
+const highlightedSolution = computed(() => hljs.highlight(displayedSolution.value, {
+  language: highlightLanguage.value,
+  ignoreIllegals: true,
+}).value)
+
+function scrollPageToTop() {
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+}
+
+function scrollQuestionToTop() {
+  if (!window.matchMedia('(max-width: 650px)').matches) return
+  questionPanel.value?.scrollIntoView({ block: 'start', behavior: 'auto' })
+}
 
 async function start() {
   sessionComplete.value = false
   selectedLanguage.value = ''
   aiHint.value = ''
   quizError.value = ''
-  if (!store.startRandomProblem() || store.questionCount) return
+  if (!store.startRandomProblem()) return
+  await nextTick()
+  scrollPageToTop()
+  if (store.questionCount) return
   await generateQuiz()
 }
 
@@ -70,9 +109,13 @@ async function generateQuiz() {
   }
 }
 
-function continueQuiz() {
+async function continueQuiz() {
   aiHint.value = ''
-  if (!store.nextQuestion()) sessionComplete.value = true
+  const hasNextQuestion = store.nextQuestion()
+  if (!hasNextQuestion) sessionComplete.value = true
+  await nextTick()
+  if (hasNextQuestion) scrollQuestionToTop()
+  else scrollPageToTop()
 }
 
 async function checkAnswer() {
@@ -179,7 +222,7 @@ async function copySolution() {
         <a v-if="store.currentProblem.source" :href="`${store.currentProblem.source.repository}#readme`" target="_blank" rel="noreferrer" class="source-note mt-6"><v-icon icon="mdi-source-repository" size="16" /> {{ store.currentProblem.source.name }} {{ store.currentProblem.source.version }} · {{ store.currentProblem.source.license }}</a>
       </aside>
 
-      <main class="coach-panel">
+      <main ref="questionPanel" class="coach-panel">
         <v-card v-if="quizLoading" class="question-card quiz-loading-card pa-8"><v-progress-circular indeterminate color="primary" size="42" /><h2>Mapping the solution path…</h2><p>The coach is turning this problem into five deliberate decisions.</p></v-card>
         <v-card v-else-if="quizError" class="question-card quiz-loading-card pa-8"><v-icon icon="mdi-connection" color="accent" size="42" /><h2>The AI coach is offline.</h2><p>{{ quizError }}</p><div class="d-flex flex-wrap justify-center ga-3"><v-btn variant="outlined" @click="generateQuiz">Retry</v-btn><v-btn color="primary" @click="start">Choose another</v-btn></div></v-card>
         <template v-else-if="!sessionComplete">
@@ -251,7 +294,7 @@ async function copySolution() {
                 </div>
                 <v-btn size="small" variant="text" :prepend-icon="copied ? 'mdi-check' : 'mdi-content-copy'" @click="copySolution">{{ copied ? 'Copied' : 'Copy' }}</v-btn>
               </div>
-              <pre><code>{{ displayedSolution }}</code></pre>
+              <pre><code class="hljs" :class="`language-${highlightLanguage}`" v-html="highlightedSolution" /></pre>
             </div>
             <div class="d-flex flex-wrap justify-center ga-3 mt-7">
               <v-btn variant="outlined" size="large" to="/profile" prepend-icon="mdi-chart-donut">View progress</v-btn>

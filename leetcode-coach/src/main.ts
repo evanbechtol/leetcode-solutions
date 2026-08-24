@@ -9,6 +9,7 @@ import './styles/main.scss'
 import App from './App.vue'
 import QuizView from './views/QuizView.vue'
 import ProfileView from './views/ProfileView.vue'
+import LearnView from './views/LearnView.vue'
 
 const vuetify = createVuetify({
   theme: {
@@ -31,6 +32,7 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: QuizView },
+    { path: '/learn/:slug?', component: LearnView },
     { path: '/profile', component: ProfileView },
   ],
 })
