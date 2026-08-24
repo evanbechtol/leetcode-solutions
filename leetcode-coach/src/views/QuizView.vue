@@ -12,15 +12,24 @@ const hintLoading = ref(false)
 const quizLoading = ref(false)
 const quizError = ref('')
 const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
+const selectedLanguage = ref('')
 
 const progress = computed(() => store.currentProblem
   ? ((store.currentQuestionIndex + (store.submitted && store.selectedAnswer === store.currentQuestion?.answer ? 1 : 0)) / Math.max(store.questionCount, 1)) * 100
   : 0)
 const activeFilterCount = computed(() => Object.values(store.filters).reduce((sum, values) => sum + values.length, 0))
 const isCorrect = computed(() => store.submitted && store.selectedAnswer === store.currentQuestion?.answer)
+const codeSamples = computed<Record<string, string>>(() => {
+  if (!store.currentProblem) return {}
+  return store.currentProblem.codeSamples || { [store.currentProblem.solutionLanguage || 'TypeScript']: store.currentProblem.solution }
+})
+const solutionLanguages = computed(() => Object.keys(codeSamples.value))
+const activeLanguage = computed(() => selectedLanguage.value || solutionLanguages.value[0] || '')
+const displayedSolution = computed(() => codeSamples.value[activeLanguage.value] || store.currentProblem?.solution || '')
 
 async function start() {
   sessionComplete.value = false
+  selectedLanguage.value = ''
   aiHint.value = ''
   quizError.value = ''
   if (!store.startRandomProblem() || store.questionCount) return
@@ -105,7 +114,7 @@ function retryQuestion() {
 
 async function copySolution() {
   if (!store.currentProblem) return
-  await navigator.clipboard.writeText(store.currentProblem.solution)
+  await navigator.clipboard.writeText(displayedSolution.value)
   copied.value = true
   window.setTimeout(() => copied.value = false, 1400)
 }
@@ -125,7 +134,10 @@ async function copySolution() {
               Choose focus <span v-if="activeFilterCount" class="filter-count ml-2">{{ activeFilterCount }}</span>
             </v-btn>
           </div>
-          <p class="match-note mt-5"><v-icon icon="mdi-shuffle-variant" size="18" /> {{ store.matchingProblems.length }} catalog problems match your focus</p>
+          <p class="match-note mt-5"><v-icon icon="mdi-shuffle-variant" size="18" />
+            <template v-if="store.aiCoachEnabled">{{ store.matchingProblems.length }} catalog problems match your focus</template>
+            <template v-else>{{ store.matchingProblems.length }} built-in lessons ready · {{ store.catalogSize }} catalog problems in AI mode</template>
+          </p>
         </div>
         <div class="path-visual" aria-hidden="true">
           <div class="orbit orbit-one" /><div class="orbit orbit-two" />
@@ -233,8 +245,13 @@ async function copySolution() {
             <p class="insight">“{{ store.currentProblem.insight || 'You connected the problem’s structure to an efficient solution and its tradeoffs.' }}”</p>
             <div class="mastery-score my-7"><strong>{{ store.firstTryCorrect }}/{{ store.questionCount }}</strong><span>first-try decisions</span></div>
             <div class="solution-block text-left">
-              <div class="d-flex justify-space-between align-center px-4 py-3"><span>Canonical {{ store.currentProblem.solutionLanguage || 'TypeScript' }} solution</span><v-btn size="small" variant="text" :prepend-icon="copied ? 'mdi-check' : 'mdi-content-copy'" @click="copySolution">{{ copied ? 'Copied' : 'Copy' }}</v-btn></div>
-              <pre><code>{{ store.currentProblem.solution }}</code></pre>
+              <div class="solution-toolbar px-4 py-3">
+                <div class="language-tabs" role="tablist" aria-label="Solution language">
+                  <button v-for="language in solutionLanguages" :key="language" role="tab" :aria-selected="activeLanguage === language" :class="{ active: activeLanguage === language }" @click="selectedLanguage = language">{{ language }}</button>
+                </div>
+                <v-btn size="small" variant="text" :prepend-icon="copied ? 'mdi-check' : 'mdi-content-copy'" @click="copySolution">{{ copied ? 'Copied' : 'Copy' }}</v-btn>
+              </div>
+              <pre><code>{{ displayedSolution }}</code></pre>
             </div>
             <div class="d-flex flex-wrap justify-center ga-3 mt-7">
               <v-btn variant="outlined" size="large" to="/profile" prepend-icon="mdi-chart-donut">View progress</v-btn>

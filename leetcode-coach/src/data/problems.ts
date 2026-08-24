@@ -1,5 +1,6 @@
 import type { Problem } from '../types'
 import importedProblems from './catalog.generated.json'
+import { curatedCodeSamples } from './solutions'
 
 export const curatedProblems: Problem[] = [
   {
@@ -103,6 +104,10 @@ export const curatedProblems: Problem[] = [
     ],
   },
 ]
+
+for (const problem of curatedProblems) {
+  problem.codeSamples = { TypeScript: problem.solution, ...curatedCodeSamples[problem.id] }
+}
 
 const byId = new Map<number, Problem>()
 for (const problem of importedProblems as Problem[]) byId.set(problem.id, problem)

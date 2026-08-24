@@ -26,6 +26,7 @@ export interface Problem {
   questions: QuizQuestion[]
   starterCode?: string
   solutionLanguage?: string
+  codeSamples?: Record<string, string>
   source?: {
     name: string
     version: string

@@ -152,7 +152,7 @@ export const useTrainerStore = defineStore('trainer', () => {
   return {
     answers, results, streak, bestStreak, currentProblemId, currentQuestionIndex, selectedAnswer, submitted,
     firstTryCorrect, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
-    totalCorrect, accuracy, completedProblemIds, typeStats, topicMastery, startRandomProblem,
+    totalCorrect, accuracy, completedProblemIds, typeStats, topicMastery, aiCoachEnabled, catalogSize: problems.length, startRandomProblem,
     setGeneratedQuestions, submitAnswer, tryAgain, nextQuestion, resetProgress,
   }
 })
