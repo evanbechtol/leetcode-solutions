@@ -1,7 +1,16 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useTrainerStore } from './stores/trainer'
 
 const store = useTrainerStore()
+const mobileNavOpen = ref(false)
+const navigation = [
+  { to: '/', label: 'Practice', description: 'Start a guided problem', icon: 'mdi-compass-outline' },
+  { to: '/problems', label: 'Problems', description: 'Browse all 136 problems', icon: 'mdi-format-list-bulleted' },
+  { to: '/learn', label: 'Learn', description: 'Study data structures and algorithms', icon: 'mdi-book-open-page-variant-outline' },
+  { to: '/cheat-sheet', label: 'Cheat Sheet', description: 'Search common patterns', icon: 'mdi-notebook-outline' },
+  { to: '/profile', label: 'Progress', description: 'Review accuracy and mastery', icon: 'mdi-chart-donut' },
+]
 </script>
 
 <template>
@@ -14,15 +23,30 @@ const store = useTrainerStore()
         </router-link>
         <v-spacer />
         <nav class="nav-pills" aria-label="Primary navigation">
-          <router-link to="/" class="nav-link"><v-icon icon="mdi-compass-outline" size="19" /> Practice</router-link>
-          <router-link to="/problems" class="nav-link"><v-icon icon="mdi-format-list-bulleted" size="19" /> Problems</router-link>
-          <router-link to="/learn" class="nav-link"><v-icon icon="mdi-book-open-page-variant-outline" size="19" /> Learn</router-link>
-          <router-link to="/cheat-sheet" class="nav-link"><v-icon icon="mdi-notebook-outline" size="19" /> Cheat Sheet</router-link>
-          <router-link to="/profile" class="nav-link"><v-icon icon="mdi-chart-donut" size="19" /> Progress</router-link>
+          <router-link v-for="item in navigation" :key="item.to" :to="item.to" class="nav-link"><v-icon :icon="item.icon" size="19" /> {{ item.label }}</router-link>
         </nav>
-        <div class="streak-pill ml-3 ml-md-6"><span>◆</span> {{ store.streak }} <span class="streak-label">streak</span></div>
+        <div class="streak-pill top-streak ml-3 ml-md-6"><span>◆</span> {{ store.streak }} <span class="streak-label">streak</span></div>
+        <v-btn class="mobile-nav-trigger" icon="mdi-menu" variant="text" aria-label="Open navigation menu" @click="mobileNavOpen = true" />
       </div>
     </v-app-bar>
+    <v-navigation-drawer v-model="mobileNavOpen" class="mobile-nav-drawer" location="right" temporary width="320">
+      <div class="mobile-nav-header">
+        <div><span class="eyebrow">Pathfinder</span><strong>Navigate</strong></div>
+        <v-btn icon="mdi-close" variant="text" aria-label="Close navigation menu" @click="mobileNavOpen = false" />
+      </div>
+      <div class="mobile-nav-streak">
+        <span class="mobile-streak-icon">◆</span>
+        <div><strong>{{ store.streak }} day streak</strong><small>Keep building the habit.</small></div>
+      </div>
+      <nav class="mobile-nav-list" aria-label="Mobile navigation">
+        <router-link v-for="item in navigation" :key="item.to" :to="item.to" class="mobile-nav-link" @click="mobileNavOpen = false">
+          <span class="mobile-nav-icon"><v-icon :icon="item.icon" size="22" /></span>
+          <span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span>
+          <v-icon icon="mdi-chevron-right" size="20" />
+        </router-link>
+      </nav>
+      <div class="mobile-nav-footer">All progress stays on this device.</div>
+    </v-navigation-drawer>
     <v-main>
       <router-view />
     </v-main>
