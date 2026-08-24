@@ -105,6 +105,10 @@ Every path places the data-structure decision immediately after contract compreh
 
 The learner selects four phases from a larger bank and places them in dependency order. The interaction supports removal, undo, reset, deterministic grading, and first-mismatch guidance. Selection is used instead of free-form text because it is exact, accessible on mobile, and does not require AI-based semantic grading.
 
+#### Construct the code
+
+Five reviewed pilot paths replace the conceptual builder with incremental implementation decisions: Two Sum, Longest Substring Without Repeating Characters, Binary Search, Binary Tree Level Order Traversal, and Course Schedule. Correct lines remain visible, wrong lines receive non-revealing feedback, concrete example state is shown after each decision, unfinished work survives refresh, and the canonical implementation appears only after every step. The first three pilots include Python, Java, C++, and Rust; the tree and graph pilots use reviewed Python variants derived from the catalog implementations.
+
 #### Iteration visualization
 
 The fifth question presents a six-frame execution trace after the learner has identified the data structure and invariant. Every frame retains the concrete input and expected output, reports the output at that step, separates processed from remaining work, shows named variables with before/after changes, highlights the active canonical-code lines, and includes an invariant checkpoint before the graded trace question.
@@ -131,7 +135,7 @@ The fifth question presents a six-frame execution trace after the learner has id
 | --- | --- | --- |
 | Foundation | Deterministic catalog, lessons, profiles, references, and static deployment | Complete |
 | Interactive reasoning | Algorithm construction and conceptual execution walkthroughs | Complete |
-| Guided discovery | Beginner-first explanations and incremental code construction | In progress |
+| Guided discovery | Beginner-first explanations and incremental code construction | Complete |
 | Production practice | Counterexamples, edge cases, complexity derivation, and test design | Next |
 | Concrete tracing | Problem-specific state animations and code/state synchronization | Planned |
 | Adaptive mastery | Spaced repetition, proficiency modeling, and personalized queues | Planned |
@@ -175,9 +179,9 @@ The application should preserve rigorous DSA fundamentals while assuming that a 
 
 - `teachingContext`: a short explanation shown before the question. Implemented.
 - `formalTerm`: the formal name and concise definition revealed after success. Implemented.
-- `hintLevels`: ordered hints from light cue to worked first step.
-- `prerequisites`: concepts the question is allowed to assume.
-- `readingLevelNotes`: authoring-only warnings for unexplained or overly academic language.
+- `hintLevels`: ordered hints from light cue to worked first step. Implemented.
+- `prerequisites`: concepts the question is allowed to assume. Implemented.
+- `readingLevelNotes`: authoring-only warnings for unexplained or overly academic language. Implemented.
 
 **Acceptance criteria:**
 
@@ -188,7 +192,7 @@ The application should preserve rigorous DSA fundamentals while assuming that a 
 - Content review includes a beginner-comprehension pass in addition to the algorithm-accuracy pass.
 - The deterministic validator reports undefined prerequisite concepts and specialized terms introduced too early.
 
-### Incremental code construction — Next / P0
+### Incremental code construction — Complete / P0
 
 The current algorithm builder orders conceptual phases. The new format should let the learner discover the actual implementation before the completed solution is shown.
 
@@ -654,9 +658,9 @@ A format is complete only when:
 
 - [x] Plain-language teaching context for every reasoning category
 - [x] Formal-term definitions revealed after intuitive understanding
-- [ ] Multi-level non-revealing hint model
-- [ ] Incremental code-construction schema and renderer
-- [ ] Five-problem code-construction pilot
+- [x] Multi-level non-revealing hint model
+- [x] Incremental code-construction schema and renderer
+- [x] Five-problem code-construction pilot
 - [x] Beginner-comprehension content-review gate
 
 ### Milestone B: deterministic production skills
