@@ -8,6 +8,7 @@ import java from 'highlight.js/lib/languages/java'
 import cpp from 'highlight.js/lib/languages/cpp'
 import rust from 'highlight.js/lib/languages/rust'
 import { useTrainerStore } from '../stores/trainer'
+import { useCodeLanguagePreference } from '../composables/useCodeLanguagePreference'
 import FilterPanel from '../components/FilterPanel.vue'
 
 hljs.registerLanguage('typescript', typescript)
@@ -26,8 +27,8 @@ const hintLoading = ref(false)
 const quizLoading = ref(false)
 const quizError = ref('')
 const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
-const selectedLanguage = ref('')
 const questionPanel = ref<HTMLElement | null>(null)
+const { preferredLanguage, setPreferredLanguage } = useCodeLanguagePreference()
 
 const progress = computed(() => store.currentProblem
   ? ((store.currentQuestionIndex + (store.submitted && store.selectedAnswer === store.currentQuestion?.answer ? 1 : 0)) / Math.max(store.questionCount, 1)) * 100
@@ -39,7 +40,9 @@ const codeSamples = computed<Record<string, string>>(() => {
   return store.currentProblem.codeSamples || { [store.currentProblem.solutionLanguage || 'TypeScript']: store.currentProblem.solution }
 })
 const solutionLanguages = computed(() => Object.keys(codeSamples.value))
-const activeLanguage = computed(() => selectedLanguage.value || solutionLanguages.value[0] || '')
+const activeLanguage = computed(() => solutionLanguages.value.includes(preferredLanguage.value)
+  ? preferredLanguage.value
+  : solutionLanguages.value[0] || '')
 const displayedSolution = computed(() => codeSamples.value[activeLanguage.value] || store.currentProblem?.solution || '')
 const highlightLanguage = computed(() => ({
   Python: 'python',
@@ -65,7 +68,6 @@ function scrollQuestionToTop() {
 
 async function start() {
   sessionComplete.value = false
-  selectedLanguage.value = ''
   aiHint.value = ''
   quizError.value = ''
   if (!store.startRandomProblem()) return
@@ -290,7 +292,7 @@ async function copySolution() {
             <div class="solution-block text-left">
               <div class="solution-toolbar px-4 py-3">
                 <div class="language-tabs" role="tablist" aria-label="Solution language">
-                  <button v-for="language in solutionLanguages" :key="language" role="tab" :aria-selected="activeLanguage === language" :class="{ active: activeLanguage === language }" @click="selectedLanguage = language">{{ language }}</button>
+                  <button v-for="language in solutionLanguages" :key="language" role="tab" :aria-selected="activeLanguage === language" :class="{ active: activeLanguage === language }" @click="setPreferredLanguage(language)">{{ language }}</button>
                 </div>
                 <v-btn size="small" variant="text" :prepend-icon="copied ? 'mdi-check' : 'mdi-content-copy'" @click="copySolution">{{ copied ? 'Copied' : 'Copy' }}</v-btn>
               </div>

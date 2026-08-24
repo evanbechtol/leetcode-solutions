@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import hljs from 'highlight.js/lib/core'
+import typescript from 'highlight.js/lib/languages/typescript'
+import python from 'highlight.js/lib/languages/python'
 import java from 'highlight.js/lib/languages/java'
+import cpp from 'highlight.js/lib/languages/cpp'
+import rust from 'highlight.js/lib/languages/rust'
 import {
   cheatCategories,
   cheatPatterns,
@@ -10,13 +14,30 @@ import {
   reasoningChecklist,
   triageSignals,
 } from '../data/cheatSheet'
+import type { CheatPattern } from '../data/cheatSheet'
+import { cheatSheetCodeSamples } from '../data/cheatSheetCodeSamples'
+import { useCodeLanguagePreference } from '../composables/useCodeLanguagePreference'
 
+hljs.registerLanguage('typescript', typescript)
+hljs.registerLanguage('python', python)
 hljs.registerLanguage('java', java)
+hljs.registerLanguage('cpp', cpp)
+hljs.registerLanguage('rust', rust)
 
 const search = ref('')
 const category = ref('All')
 const openPatterns = ref<number[]>([])
 const showAllTriage = ref(false)
+const copiedPattern = ref<number | null>(null)
+const { preferredLanguage, setPreferredLanguage } = useCodeLanguagePreference()
+const patternLanguages = ['TypeScript', 'Python', 'Java', 'C++', 'Rust']
+const highlightLanguages: Record<string, string> = {
+  TypeScript: 'typescript',
+  Python: 'python',
+  Java: 'java',
+  'C++': 'cpp',
+  Rust: 'rust',
+}
 
 const filteredPatterns = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -63,8 +84,47 @@ function clearFilters() {
   category.value = 'All'
 }
 
-function highlightedJava(source: string) {
-  return hljs.highlight(source, { language: 'java' }).value
+function codeSamplesFor(pattern: CheatPattern): Record<string, string> {
+  if (!pattern.template) return {}
+  const supplemental = cheatSheetCodeSamples[pattern.number] || {}
+  return {
+    ...(supplemental.TypeScript ? { TypeScript: supplemental.TypeScript } : {}),
+    ...(supplemental.Python ? { Python: supplemental.Python } : {}),
+    Java: pattern.template,
+    ...(supplemental['C++'] ? { 'C++': supplemental['C++'] } : {}),
+    ...(supplemental.Rust ? { Rust: supplemental.Rust } : {}),
+  }
+}
+
+function languagesFor(pattern: CheatPattern) {
+  const samples = codeSamplesFor(pattern)
+  return patternLanguages.filter((language) => Boolean(samples[language]))
+}
+
+function activeLanguageFor(pattern: CheatPattern) {
+  const languages = languagesFor(pattern)
+  return languages.includes(preferredLanguage.value) ? preferredLanguage.value : languages[0] || 'Java'
+}
+
+function sourceFor(pattern: CheatPattern) {
+  const language = activeLanguageFor(pattern)
+  return codeSamplesFor(pattern)[language] || ''
+}
+
+function highlightedTemplate(pattern: CheatPattern) {
+  const language = activeLanguageFor(pattern)
+  return hljs.highlight(sourceFor(pattern), {
+    language: highlightLanguages[language] || 'typescript',
+    ignoreIllegals: true,
+  }).value
+}
+
+async function copyTemplate(pattern: CheatPattern) {
+  await navigator.clipboard.writeText(sourceFor(pattern))
+  copiedPattern.value = pattern.number
+  window.setTimeout(() => {
+    if (copiedPattern.value === pattern.number) copiedPattern.value = null
+  }, 1400)
 }
 
 function makeMarkdown() {
@@ -110,7 +170,10 @@ function makeMarkdown() {
     )
 
     if (pattern.template) {
-      lines.push('### Java template', '', '```java', pattern.template, '```', '')
+      for (const [language, source] of Object.entries(codeSamplesFor(pattern))) {
+        const fenceLanguage = highlightLanguages[language] || language.toLowerCase()
+        lines.push(`### ${language} template`, '', `\`\`\`${fenceLanguage}`, source, '\`\`\`', '')
+      }
     }
   }
 
@@ -284,8 +347,33 @@ function downloadCheatSheet() {
                 </section>
 
                 <section v-if="pattern.template" class="cheat-code solution-block">
-                  <header><span>Java template</span><small>Reference skeleton</small></header>
-                  <pre><code class="hljs language-java" v-html="highlightedJava(pattern.template)" /></pre>
+                  <header class="solution-toolbar">
+                    <div class="language-tabs" role="tablist" :aria-label="`${pattern.title} template language`">
+                      <button
+                        v-for="language in languagesFor(pattern)"
+                        :key="language"
+                        role="tab"
+                        :aria-selected="activeLanguageFor(pattern) === language"
+                        :class="{ active: activeLanguageFor(pattern) === language }"
+                        @click="setPreferredLanguage(language)"
+                      >
+                        {{ language }}
+                      </button>
+                    </div>
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      :prepend-icon="copiedPattern === pattern.number ? 'mdi-check' : 'mdi-content-copy'"
+                      @click="copyTemplate(pattern)"
+                    >
+                      {{ copiedPattern === pattern.number ? 'Copied' : 'Copy' }}
+                    </v-btn>
+                  </header>
+                  <pre><code
+                    class="hljs"
+                    :class="`language-${highlightLanguages[activeLanguageFor(pattern)]}`"
+                    v-html="highlightedTemplate(pattern)"
+                  /></pre>
                 </section>
               </div>
             </v-expansion-panel-text>
