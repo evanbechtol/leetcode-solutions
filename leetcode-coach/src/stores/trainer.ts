@@ -6,6 +6,7 @@ import type { AnswerRecord, Filters, ProblemResult, QuestionType, QuizQuestion }
 const STORAGE_KEY = 'pathfinder-progress-v1'
 const QUIZ_CACHE_KEY = 'pathfinder-generated-quizzes-v1'
 const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
+export const QUESTION_TYPES: QuestionType[] = ['Comprehension', 'Pattern', 'Data Structure', 'Invariant', 'Algorithm', 'Correctness', 'Complexity']
 
 interface PersistedProgress {
   answers: AnswerRecord[]
@@ -18,7 +19,7 @@ function loadProgress(): PersistedProgress {
   try {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '')
     return {
-      answers: Array.isArray(value.answers) ? value.answers : [],
+      answers: Array.isArray(value.answers) ? value.answers.map(normalizeAnswerRecord) : [],
       results: Array.isArray(value.results) ? value.results : [],
       streak: Number(value.streak) || 0,
       bestStreak: Number(value.bestStreak) || 0,
@@ -26,6 +27,13 @@ function loadProgress(): PersistedProgress {
   } catch {
     return { answers: [], results: [], streak: 0, bestStreak: 0 }
   }
+}
+
+export function normalizeAnswerRecord(answer: AnswerRecord): AnswerRecord {
+  if (answer.questionType === 'Time Complexity' || answer.questionType === 'Space Complexity') {
+    return { ...answer, questionType: 'Complexity' }
+  }
+  return answer
 }
 
 export const useTrainerStore = defineStore('trainer', () => {
@@ -50,7 +58,7 @@ export const useTrainerStore = defineStore('trainer', () => {
   const currentProblem = computed(() => problems.find((problem) => problem.id === currentProblemId.value) ?? null)
   const currentQuestion = computed(() => activeQuestions.value[currentQuestionIndex.value] ?? null)
   const questionCount = computed(() => activeQuestions.value.length)
-  const availableProblems = computed(() => aiCoachEnabled ? problems : problems.filter((problem) => problem.questions.length > 0))
+  const availableProblems = computed(() => problems.filter((problem) => problem.questions.length > 0))
   const matchingProblems = computed(() => availableProblems.value.filter((problem) => {
     const f = filters.value
     return (!f.difficulties.length || f.difficulties.includes(problem.difficulty))
@@ -62,8 +70,7 @@ export const useTrainerStore = defineStore('trainer', () => {
   const accuracy = computed(() => answers.value.length ? Math.round((totalCorrect.value / answers.value.length) * 100) : 0)
   const completedProblemIds = computed(() => new Set(results.value.map((result) => result.problemId)))
   const typeStats = computed(() => {
-    const types: QuestionType[] = ['Pattern', 'Data Structure', 'Algorithm', 'Time Complexity', 'Space Complexity']
-    return types.map((type) => {
+    return QUESTION_TYPES.map((type) => {
       const relevant = answers.value.filter((answer) => answer.questionType === type)
       const correct = relevant.filter((answer) => answer.correct).length
       return { type, correct, total: relevant.length, accuracy: relevant.length ? Math.round((correct / relevant.length) * 100) : 0 }

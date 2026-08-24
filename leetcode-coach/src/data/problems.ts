@@ -1,6 +1,8 @@
 import type { Problem } from '../types'
 import importedProblems from './catalog.generated.json'
 import { curatedCodeSamples } from './solutions'
+import { compileQuestionPath } from './coaching/compiler'
+import { assertValidCoachingContent } from './coaching/validation'
 
 export const curatedProblems: Problem[] = [
   {
@@ -112,4 +114,10 @@ for (const problem of curatedProblems) {
 const byId = new Map<number, Problem>()
 for (const problem of importedProblems as Problem[]) byId.set(problem.id, problem)
 for (const problem of curatedProblems) byId.set(problem.id, problem)
-export const problems: Problem[] = [...byId.values()]
+const mergedProblems: Problem[] = [...byId.values()]
+export const problems: Problem[] = mergedProblems.map((problem) => ({
+  ...problem,
+  questions: compileQuestionPath(problem, mergedProblems),
+}))
+
+if (import.meta.env.DEV) assertValidCoachingContent(problems)

@@ -1,14 +1,39 @@
 export type Difficulty = 'Easy' | 'Medium' | 'Hard'
-export type QuestionType = 'Pattern' | 'Data Structure' | 'Algorithm' | 'Time Complexity' | 'Space Complexity'
+export type QuestionType =
+  | 'Comprehension'
+  | 'Pattern'
+  | 'Data Structure'
+  | 'Invariant'
+  | 'Algorithm'
+  | 'Correctness'
+  | 'Complexity'
+
+export type LegacyQuestionType = 'Time Complexity' | 'Space Complexity'
+
+export type QuestionStage =
+  | 'contract'
+  | 'bottleneck'
+  | 'pattern'
+  | 'data-structure'
+  | 'invariant'
+  | 'transition'
+  | 'trace'
+  | 'correctness'
+  | 'edge-case'
+  | 'time-complexity'
+  | 'space-complexity'
+  | 'tradeoff'
 
 export interface QuizQuestion {
   id: string
-  type: QuestionType
+  type: QuestionType | LegacyQuestionType
+  stage?: QuestionStage
   prompt: string
   options: string[]
   answer: number
   explanation: string
   hint: string
+  optionFeedback?: string[]
 }
 
 export interface Problem {
@@ -46,7 +71,7 @@ export interface Filters {
 export interface AnswerRecord {
   problemId: number
   questionId: string
-  questionType: QuestionType
+  questionType: QuestionType | LegacyQuestionType
   correct: boolean
   answeredAt: string
 }

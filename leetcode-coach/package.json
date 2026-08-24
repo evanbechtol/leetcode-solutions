@@ -5,10 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:network": "vite --host 0.0.0.0 --port 5173",
     "dev:ai": "vite --mode ai",
     "hints": "node server/hints.mjs",
     "catalog:import": "node scripts/import-newfacade-dataset.mjs",
-    "build": "vue-tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "content:validate": "vitest run src/data/coaching/coaching.test.ts",
+    "build": "vitest run src/data/coaching/coaching.test.ts && vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist"
   },
@@ -28,6 +32,7 @@
     "typescript": "~5.8.3",
     "vite": "^7.1.2",
     "vite-plugin-vuetify": "^2.1.1",
+    "vitest": "^4.1.11",
     "vue-tsc": "^3.0.5"
   }
 }

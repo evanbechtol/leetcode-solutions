@@ -10,6 +10,7 @@ import rust from 'highlight.js/lib/languages/rust'
 import { useTrainerStore } from '../stores/trainer'
 import { useCodeLanguagePreference } from '../composables/useCodeLanguagePreference'
 import FilterPanel from '../components/FilterPanel.vue'
+import { incorrectFeedbackFor, shouldRevealCorrectChoice } from '../utils/quizFeedback'
 
 hljs.registerLanguage('typescript', typescript)
 hljs.registerLanguage('javascript', javascript)
@@ -35,6 +36,7 @@ const progress = computed(() => store.currentProblem
   : 0)
 const activeFilterCount = computed(() => Object.values(store.filters).reduce((sum, values) => sum + values.length, 0))
 const isCorrect = computed(() => store.submitted && store.selectedAnswer === store.currentQuestion?.answer)
+const revealCorrectChoice = computed(() => shouldRevealCorrectChoice(store.submitted, isCorrect.value))
 const codeSamples = computed<Record<string, string>>(() => {
   if (!store.currentProblem) return {}
   return store.currentProblem.codeSamples || { [store.currentProblem.solutionLanguage || 'TypeScript']: store.currentProblem.solution }
@@ -124,8 +126,8 @@ async function checkAnswer() {
   const correct = store.submitAnswer()
   aiHint.value = ''
   if (correct !== false || !store.currentProblem || !store.currentQuestion || store.selectedAnswer === null) return
-  if (!aiCoachEnabled) {
-    aiHint.value = store.currentQuestion.hint
+  if (store.currentQuestion.id.includes(':static-v1:') || !aiCoachEnabled) {
+    aiHint.value = incorrectFeedbackFor(store.currentQuestion, store.selectedAnswer)
     return
   }
   hintLoading.value = true
@@ -180,8 +182,7 @@ async function copySolution() {
             </v-btn>
           </div>
           <p class="match-note mt-5"><v-icon icon="mdi-shuffle-variant" size="18" />
-            <template v-if="store.aiCoachEnabled">{{ store.matchingProblems.length }} catalog problems match your focus</template>
-            <template v-else>{{ store.matchingProblems.length }} built-in lessons ready · {{ store.catalogSize }} catalog problems in AI mode</template>
+            <template>{{ store.matchingProblems.length }} verified coaching paths match your focus</template>
           </p>
         </div>
         <div class="path-visual" aria-hidden="true">
@@ -245,7 +246,7 @@ async function copySolution() {
                 class="answer-option"
                 :class="{
                   selected: store.selectedAnswer === index,
-                  correct: store.submitted && index === store.currentQuestion?.answer,
+                  correct: revealCorrectChoice && index === store.currentQuestion?.answer,
                   wrong: store.submitted && store.selectedAnswer === index && index !== store.currentQuestion?.answer,
                 }"
                 :disabled="store.submitted"
@@ -255,7 +256,7 @@ async function copySolution() {
               >
                 <span class="option-key">{{ String.fromCharCode(65 + index) }}</span>
                 <span>{{ option }}</span>
-                <v-icon v-if="store.submitted && index === store.currentQuestion?.answer" icon="mdi-check-circle" color="success" />
+                <v-icon v-if="revealCorrectChoice && index === store.currentQuestion?.answer" icon="mdi-check-circle" color="success" />
                 <v-icon v-else-if="store.submitted && store.selectedAnswer === index" icon="mdi-close-circle" color="error" />
               </button>
             </div>
@@ -265,7 +266,7 @@ async function copySolution() {
                 <div class="feedback-heading"><v-icon :icon="isCorrect ? 'mdi-check-decagram' : 'mdi-sign-direction'" /> {{ isCorrect ? 'That’s the move.' : 'Take another look.' }}</div>
                 <p v-if="!isCorrect && hintLoading" class="hint-loading"><v-progress-circular indeterminate size="16" width="2" /> Your coach is shaping a hint around that choice…</p>
                 <p v-else>{{ isCorrect ? store.currentQuestion?.explanation : (aiHint || store.currentQuestion?.hint) }}</p>
-                <div v-if="!isCorrect" class="why-note"><strong>Why this choice misses:</strong> {{ store.currentQuestion?.explanation }}</div>
+                <div v-if="!isCorrect" class="why-note"><strong>Leading hint:</strong> {{ store.currentQuestion?.hint }}</div>
               </div>
             </v-expand-transition>
 
