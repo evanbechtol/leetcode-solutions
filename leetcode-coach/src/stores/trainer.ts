@@ -1,12 +1,18 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { problems } from '../data/problems'
-import type { AnswerRecord, Filters, ProblemResult, QuestionType, QuizQuestion } from '../types'
+import type { AnswerRecord, Filters, ProblemResult, QuestionFormat, QuestionType, QuizQuestion } from '../types'
+import { drawRandomProblem } from '../utils/randomSelection'
 
 const STORAGE_KEY = 'pathfinder-progress-v1'
 const QUIZ_CACHE_KEY = 'pathfinder-generated-quizzes-v1'
 const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
 export const QUESTION_TYPES: QuestionType[] = ['Comprehension', 'Pattern', 'Data Structure', 'Invariant', 'Algorithm', 'Correctness', 'Complexity']
+export const QUESTION_FORMATS: Array<{ format: QuestionFormat; label: string }> = [
+  { format: 'multiple-choice', label: 'Decision questions' },
+  { format: 'algorithm-builder', label: 'Build the algorithm' },
+  { format: 'iteration-visualization', label: 'Iteration walkthroughs' },
+]
 
 interface PersistedProgress {
   answers: AnswerRecord[]
@@ -31,9 +37,9 @@ function loadProgress(): PersistedProgress {
 
 export function normalizeAnswerRecord(answer: AnswerRecord): AnswerRecord {
   if (answer.questionType === 'Time Complexity' || answer.questionType === 'Space Complexity') {
-    return { ...answer, questionType: 'Complexity' }
+    return { ...answer, questionType: 'Complexity', questionFormat: answer.questionFormat ?? 'multiple-choice' }
   }
-  return answer
+  return { ...answer, questionFormat: answer.questionFormat ?? 'multiple-choice' }
 }
 
 export const useTrainerStore = defineStore('trainer', () => {
@@ -46,6 +52,7 @@ export const useTrainerStore = defineStore('trainer', () => {
   const currentQuestionIndex = ref(0)
   const selectedAnswer = ref<number | null>(null)
   const submitted = ref(false)
+  const answerCorrect = ref<boolean | null>(null)
   const firstTryCorrect = ref(0)
   const attemptedCurrent = ref(new Set<string>())
   const activeQuestions = ref<QuizQuestion[]>([])
@@ -54,6 +61,8 @@ export const useTrainerStore = defineStore('trainer', () => {
     catch { return {} }
   })())
   const filters = ref<Filters>({ difficulties: [], sets: [], topics: [], algorithms: [] })
+  let problemQueue: number[] = []
+  let problemPoolKey = ''
 
   const currentProblem = computed(() => problems.find((problem) => problem.id === currentProblemId.value) ?? null)
   const currentQuestion = computed(() => activeQuestions.value[currentQuestionIndex.value] ?? null)
@@ -76,6 +85,11 @@ export const useTrainerStore = defineStore('trainer', () => {
       return { type, correct, total: relevant.length, accuracy: relevant.length ? Math.round((correct / relevant.length) * 100) : 0 }
     })
   })
+  const formatStats = computed(() => QUESTION_FORMATS.map(({ format, label }) => {
+    const relevant = answers.value.filter((answer) => (answer.questionFormat ?? 'multiple-choice') === format)
+    const correct = relevant.filter((answer) => answer.correct).length
+    return { format, label, correct, total: relevant.length, accuracy: relevant.length ? Math.round((correct / relevant.length) * 100) : 0 }
+  }))
   const topicMastery = computed(() => {
     const coreTopics = ['Array', 'String', 'Hash Table', 'Linked List', 'Tree', 'Graph', 'Dynamic Programming', 'Heap']
     return coreTopics.map((topic) => {
@@ -93,14 +107,22 @@ export const useTrainerStore = defineStore('trainer', () => {
 
   function startRandomProblem() {
     if (!matchingProblems.value.length) return false
-    const pool = matchingProblems.value.filter((problem) => problem.id !== currentProblemId.value)
-    const options = pool.length ? pool : matchingProblems.value
-    const selected = options[Math.floor(Math.random() * options.length)]
+    const eligibleIds = matchingProblems.value.map(({ id }) => id)
+    const nextPoolKey = [...eligibleIds].sort((left, right) => left - right).join(',')
+    if (nextPoolKey !== problemPoolKey) {
+      problemQueue = []
+      problemPoolKey = nextPoolKey
+    }
+    const draw = drawRandomProblem(eligibleIds, currentProblemId.value, problemQueue)
+    if (draw.selectedId === null) return false
+    problemQueue = draw.remainingQueue
+    const selected = matchingProblems.value.find(({ id }) => id === draw.selectedId)!
     currentProblemId.value = selected.id
     activeQuestions.value = selected.questions.length ? selected.questions : (quizCache.value[selected.id] || [])
     currentQuestionIndex.value = 0
     selectedAnswer.value = null
     submitted.value = false
+    answerCorrect.value = null
     firstTryCorrect.value = 0
     attemptedCurrent.value = new Set()
     return true
@@ -113,13 +135,19 @@ export const useTrainerStore = defineStore('trainer', () => {
     return true
   }
 
-  function submitAnswer() {
-    if (selectedAnswer.value === null || !currentProblem.value || !currentQuestion.value) return null
-    const correct = selectedAnswer.value === currentQuestion.value.answer
+  function recordAnswer(correct: boolean) {
+    if (!currentProblem.value || !currentQuestion.value || submitted.value) return null
     const key = `${currentProblem.value.id}:${currentQuestion.value.id}`
     const firstAttempt = !attemptedCurrent.value.has(key)
     attemptedCurrent.value.add(key)
-    answers.value.push({ problemId: currentProblem.value.id, questionId: currentQuestion.value.id, questionType: currentQuestion.value.type, correct, answeredAt: new Date().toISOString() })
+    answers.value.push({
+      problemId: currentProblem.value.id,
+      questionId: currentQuestion.value.id,
+      questionType: currentQuestion.value.type,
+      questionFormat: currentQuestion.value.format ?? 'multiple-choice',
+      correct,
+      answeredAt: new Date().toISOString(),
+    })
     if (correct) {
       if (firstAttempt) firstTryCorrect.value++
       streak.value++
@@ -127,13 +155,25 @@ export const useTrainerStore = defineStore('trainer', () => {
     } else {
       streak.value = 0
     }
+    answerCorrect.value = correct
     submitted.value = true
     return correct
+  }
+
+  function submitAnswer() {
+    if (selectedAnswer.value === null || !currentProblem.value || !currentQuestion.value) return null
+    const correct = selectedAnswer.value === currentQuestion.value.answer
+    return recordAnswer(correct)
+  }
+
+  function submitEvaluatedAnswer(correct: boolean) {
+    return recordAnswer(correct)
   }
 
   function tryAgain() {
     selectedAnswer.value = null
     submitted.value = false
+    answerCorrect.value = null
   }
 
   function nextQuestion() {
@@ -142,6 +182,7 @@ export const useTrainerStore = defineStore('trainer', () => {
       currentQuestionIndex.value++
       selectedAnswer.value = null
       submitted.value = false
+      answerCorrect.value = null
       return true
     }
     results.value.push({ problemId: currentProblem.value.id, completedAt: new Date().toISOString(), correct: firstTryCorrect.value, total: activeQuestions.value.length })
@@ -157,9 +198,9 @@ export const useTrainerStore = defineStore('trainer', () => {
   }
 
   return {
-    answers, results, streak, bestStreak, currentProblemId, currentQuestionIndex, selectedAnswer, submitted,
+    answers, results, streak, bestStreak, currentProblemId, currentQuestionIndex, selectedAnswer, submitted, answerCorrect,
     firstTryCorrect, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
-    totalCorrect, accuracy, completedProblemIds, typeStats, topicMastery, aiCoachEnabled, catalogSize: problems.length, startRandomProblem,
-    setGeneratedQuestions, submitAnswer, tryAgain, nextQuestion, resetProgress,
+    totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, topicMastery, aiCoachEnabled, catalogSize: problems.length, startRandomProblem,
+    setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, tryAgain, nextQuestion, resetProgress,
   }
 })

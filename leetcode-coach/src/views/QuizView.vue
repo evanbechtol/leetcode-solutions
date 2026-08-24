@@ -10,6 +10,8 @@ import rust from 'highlight.js/lib/languages/rust'
 import { useTrainerStore } from '../stores/trainer'
 import { useCodeLanguagePreference } from '../composables/useCodeLanguagePreference'
 import FilterPanel from '../components/FilterPanel.vue'
+import AlgorithmBuilderQuestion from '../components/questions/AlgorithmBuilderQuestion.vue'
+import IterationVisualizationQuestion from '../components/questions/IterationVisualizationQuestion.vue'
 import { incorrectFeedbackFor, shouldRevealCorrectChoice } from '../utils/quizFeedback'
 
 hljs.registerLanguage('typescript', typescript)
@@ -29,14 +31,29 @@ const quizLoading = ref(false)
 const quizError = ref('')
 const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
 const questionPanel = ref<HTMLElement | null>(null)
+const interactionKey = ref(0)
+const interactionResponse = ref({ ready: false, correct: false, feedback: '' })
 const { preferredLanguage, setPreferredLanguage } = useCodeLanguagePreference()
 
 const progress = computed(() => store.currentProblem
   ? ((store.currentQuestionIndex + (store.submitted && store.selectedAnswer === store.currentQuestion?.answer ? 1 : 0)) / Math.max(store.questionCount, 1)) * 100
   : 0)
 const activeFilterCount = computed(() => Object.values(store.filters).reduce((sum, values) => sum + values.length, 0))
-const isCorrect = computed(() => store.submitted && store.selectedAnswer === store.currentQuestion?.answer)
+const currentFormat = computed(() => store.currentQuestion?.format ?? 'multiple-choice')
+const isMultipleChoice = computed(() => currentFormat.value === 'multiple-choice')
+const isCorrect = computed(() => store.submitted && store.answerCorrect === true)
 const revealCorrectChoice = computed(() => shouldRevealCorrectChoice(store.submitted, isCorrect.value))
+const canSubmit = computed(() => isMultipleChoice.value ? store.selectedAnswer !== null : interactionResponse.value.ready)
+const actionInstruction = computed(() => ({
+  'multiple-choice': 'Select the strongest answer',
+  'algorithm-builder': 'Place all four phases in order',
+  'iteration-visualization': 'Run every frame, then answer the checkpoint',
+}[currentFormat.value]))
+const checkLabel = computed(() => ({
+  'multiple-choice': 'Check reasoning',
+  'algorithm-builder': 'Check sequence',
+  'iteration-visualization': 'Check trace',
+}[currentFormat.value]))
 const codeSamples = computed<Record<string, string>>(() => {
   if (!store.currentProblem) return {}
   return store.currentProblem.codeSamples || { [store.currentProblem.solutionLanguage || 'TypeScript']: store.currentProblem.solution }
@@ -68,10 +85,20 @@ function scrollQuestionToTop() {
   questionPanel.value?.scrollIntoView({ block: 'start', behavior: 'auto' })
 }
 
+function resetInteraction() {
+  interactionResponse.value = { ready: false, correct: false, feedback: '' }
+  interactionKey.value++
+}
+
+function updateInteraction(response: { ready: boolean; correct: boolean; feedback: string }) {
+  interactionResponse.value = response
+}
+
 async function start() {
   sessionComplete.value = false
   aiHint.value = ''
   quizError.value = ''
+  resetInteraction()
   if (!store.startRandomProblem()) return
   await nextTick()
   scrollPageToTop()
@@ -116,6 +143,7 @@ async function generateQuiz() {
 async function continueQuiz() {
   aiHint.value = ''
   const hasNextQuestion = store.nextQuestion()
+  resetInteraction()
   if (!hasNextQuestion) sessionComplete.value = true
   await nextTick()
   if (hasNextQuestion) scrollQuestionToTop()
@@ -123,11 +151,16 @@ async function continueQuiz() {
 }
 
 async function checkAnswer() {
-  const correct = store.submitAnswer()
+  const correct = isMultipleChoice.value
+    ? store.submitAnswer()
+    : store.submitEvaluatedAnswer(interactionResponse.value.correct)
   aiHint.value = ''
-  if (correct !== false || !store.currentProblem || !store.currentQuestion || store.selectedAnswer === null) return
-  if (store.currentQuestion.id.includes(':static-v1:') || !aiCoachEnabled) {
-    aiHint.value = incorrectFeedbackFor(store.currentQuestion, store.selectedAnswer)
+  if (correct !== false || !store.currentProblem || !store.currentQuestion) return
+  if (isMultipleChoice.value && store.selectedAnswer === null) return
+  if (store.currentQuestion.id.includes(':static-v') || !aiCoachEnabled) {
+    aiHint.value = isMultipleChoice.value && store.selectedAnswer !== null
+      ? incorrectFeedbackFor(store.currentQuestion, store.selectedAnswer)
+      : interactionResponse.value.feedback
     return
   }
   hintLoading.value = true
@@ -140,7 +173,7 @@ async function checkAnswer() {
         problem: { title: store.currentProblem.title, description: store.currentProblem.description, constraints: store.currentProblem.constraints },
         question: store.currentQuestion.prompt,
         options: store.currentQuestion.options,
-        selectedOption: store.currentQuestion.options[store.selectedAnswer],
+        selectedOption: store.currentQuestion.options[store.selectedAnswer!],
         questionType: store.currentQuestion.type,
       }),
     })
@@ -157,6 +190,7 @@ async function checkAnswer() {
 function retryQuestion() {
   aiHint.value = ''
   store.tryAgain()
+  resetInteraction()
 }
 
 async function copySolution() {
@@ -237,9 +271,27 @@ async function copySolution() {
             <v-progress-linear :model-value="progress" color="primary" bg-color="#2b3039" height="6" rounded />
           </div>
           <v-card class="question-card pa-6 pa-md-9">
-            <div class="question-type"><v-icon icon="mdi-lightbulb-on-outline" size="18" /> {{ store.currentQuestion?.type }}</div>
+            <div class="question-type">
+              <v-icon :icon="currentFormat === 'algorithm-builder' ? 'mdi-code-braces' : currentFormat === 'iteration-visualization' ? 'mdi-motion-play-outline' : 'mdi-lightbulb-on-outline'" size="18" />
+              {{ store.currentQuestion?.type }}
+              <span v-if="currentFormat !== 'multiple-choice'">· {{ currentFormat === 'algorithm-builder' ? 'Build' : 'Visualize' }}</span>
+            </div>
             <h2>{{ store.currentQuestion?.prompt }}</h2>
-            <div class="answer-list mt-7" role="radiogroup" :aria-label="store.currentQuestion?.prompt">
+            <AlgorithmBuilderQuestion
+              v-if="currentFormat === 'algorithm-builder' && store.currentQuestion"
+              :key="interactionKey"
+              :question="store.currentQuestion"
+              :submitted="store.submitted"
+              @response-change="updateInteraction"
+            />
+            <IterationVisualizationQuestion
+              v-else-if="currentFormat === 'iteration-visualization' && store.currentQuestion"
+              :key="interactionKey"
+              :question="store.currentQuestion"
+              :submitted="store.submitted"
+              @response-change="updateInteraction"
+            />
+            <div v-else class="answer-list mt-7" role="radiogroup" :aria-label="store.currentQuestion?.prompt">
               <button
                 v-for="(option, index) in store.currentQuestion?.options"
                 :key="option"
@@ -271,9 +323,9 @@ async function copySolution() {
             </v-expand-transition>
 
             <div class="question-actions mt-7">
-              <span v-if="!store.submitted" class="keyboard-note">Select the strongest answer</span>
+              <span v-if="!store.submitted" class="keyboard-note">{{ actionInstruction }}</span>
               <v-spacer />
-              <v-btn v-if="!store.submitted" color="primary" size="large" :disabled="store.selectedAnswer === null" @click="checkAnswer">Check reasoning</v-btn>
+              <v-btn v-if="!store.submitted" color="primary" size="large" :disabled="!canSubmit" @click="checkAnswer">{{ checkLabel }}</v-btn>
               <v-btn v-else-if="!isCorrect" color="primary" size="large" prepend-icon="mdi-reload" :disabled="hintLoading" @click="retryQuestion">Try again</v-btn>
               <v-btn v-else color="primary" size="large" append-icon="mdi-arrow-right" @click="continueQuiz">
                 {{ store.currentQuestionIndex === store.questionCount - 1 ? 'See solution' : 'Next decision' }}

@@ -2,6 +2,8 @@
 
 A guided, gamified LeetCode practice app built with Vue 3, TypeScript, Pinia, Vuetify, and SCSS.
 
+See the [product roadmap](docs/PRODUCT_ROADMAP.md) for the current capability baseline, planned question formats, accuracy gates, and longer-term platform direction.
+
 ## Run locally
 
 ```bash
@@ -9,22 +11,28 @@ npm install
 npm run dev
 ```
 
-The default development command keeps the AI coach disabled and uses only the built-in guided lessons with curated hints. To enable dataset-backed quiz generation and personalized hints, run the frontend in AI mode:
+The default development command uses the complete deterministic catalog and does not require an API key or local service. To expose the development server to other devices on the same network, run:
+
+```powershell
+npm.cmd run dev:network
+```
+
+This binds Vite to `0.0.0.0` on port `5173`.
+
+An experimental AI service remains in the repository behind an explicit mode for future coaching work:
 
 ```powershell
 npm.cmd run dev:ai
 ```
 
-The equivalent direct flag is `npm.cmd run dev -- --mode ai`.
-
-In a second terminal, enable AI-generated Socratic hints:
+In a second terminal, start that service with:
 
 ```powershell
 $env:OPENAI_API_KEY="your_key_here"
 npm.cmd run hints
 ```
 
-The browser never receives the API key. If the local hint service is stopped or unconfigured, the quiz automatically falls back to its curated hint.
+The browser never receives the API key. Current static coaching paths deliberately use their reviewed deterministic hints even when AI mode is enabled.
 
 Create a production build with `npm run build`; the output is written to `dist/`.
 
@@ -40,7 +48,9 @@ Then configure the repository's Pages source to the `gh-pages` branch. Progress 
 
 ## Content model
 
-The app combines five hand-authored lessons in `src/data/problems.ts` with a generated foundations catalog in `src/data/catalog.generated.json`. Hand-authored lessons take precedence when IDs overlap. Every quiz progresses from pattern recognition through algorithm selection to complexity analysis.
+The app combines five hand-authored problem records in `src/data/problems.ts` with a generated foundations catalog in `src/data/catalog.generated.json`. Hand-authored records take precedence when IDs overlap, producing 136 merged problems. A typed deterministic compiler builds every coaching path from reviewed pattern profiles and problem-specific teaching facts.
+
+Standard paths contain ten questions and deep representative paths contain thirteen. They progress from contract comprehension through pattern, state, invariant, iteration visualization, algorithm construction, correctness, and complexity. All paths work without AI.
 
 Topic mastery is calculated from the loaded catalog: a track reaches 100% only when every problem carrying that core topic has been completed.
 
@@ -55,7 +65,7 @@ The catalog pipeline:
 1. Download the pinned v0.3.1 training and test archives at build-maintenance time.
 2. Normalize tags into the core tracks: arrays, strings, hash maps, linked lists, trees, graphs, dynamic programming, and heaps.
 3. Select up to 20 low-numbered foundational problems for each core topic and emit a deduplicated static catalog.
-4. Generate the guided decision sequence through the local AI coach on first use and cache it in the browser.
+4. Compile the guided path deterministically from reviewed pattern profiles and problem teaching facts.
 5. Keep original source and license metadata on every imported record.
 
 Refresh the pinned catalog with:
@@ -68,4 +78,4 @@ Set `CATALOG_PROBLEMS_PER_TOPIC` to change the default target of 20. The current
 
 ## Deployment boundary
 
-The static application works on GitHub Pages, but generated quizzes and AI hints require a small separately hosted server or serverless function because API keys must not appear in client-side code. `server/hints.mjs` is the local personal-use implementation and can later be moved to a serverless host without changing the quiz interface; set `VITE_HINT_API_URL` and `VITE_QUIZ_API_URL` to its deployed endpoints.
+The complete deterministic application works on GitHub Pages. Optional future AI coaching requires a separately hosted server or serverless function because API keys must not appear in client-side code. `server/hints.mjs` remains the local experimental implementation and can later be moved without changing the quiz interface; set `VITE_HINT_API_URL` and `VITE_QUIZ_API_URL` only when deliberately testing that integration.

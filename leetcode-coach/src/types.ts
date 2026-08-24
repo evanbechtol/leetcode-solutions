@@ -9,6 +9,7 @@ export type QuestionType =
   | 'Complexity'
 
 export type LegacyQuestionType = 'Time Complexity' | 'Space Complexity'
+export type QuestionFormat = 'multiple-choice' | 'algorithm-builder' | 'iteration-visualization'
 
 export type QuestionStage =
   | 'contract'
@@ -16,6 +17,8 @@ export type QuestionStage =
   | 'pattern'
   | 'data-structure'
   | 'invariant'
+  | 'visualization'
+  | 'build-algorithm'
   | 'transition'
   | 'trace'
   | 'correctness'
@@ -24,9 +27,35 @@ export type QuestionStage =
   | 'space-complexity'
   | 'tradeoff'
 
+export interface AlgorithmBuildStep {
+  id: string
+  text: string
+  reason: string
+}
+
+export interface AlgorithmBuilderConfig {
+  steps: AlgorithmBuildStep[]
+  correctOrder: string[]
+}
+
+export interface VisualizationFrame {
+  id: string
+  phase: string
+  title: string
+  action: string
+  state: Array<{ label: string; value: string }>
+  invariant: string
+}
+
+export interface IterationVisualizationConfig {
+  input: string
+  frames: VisualizationFrame[]
+}
+
 export interface QuizQuestion {
   id: string
   type: QuestionType | LegacyQuestionType
+  format?: QuestionFormat
   stage?: QuestionStage
   prompt: string
   options: string[]
@@ -34,6 +63,8 @@ export interface QuizQuestion {
   explanation: string
   hint: string
   optionFeedback?: string[]
+  builder?: AlgorithmBuilderConfig
+  visualization?: IterationVisualizationConfig
 }
 
 export interface Problem {
@@ -72,6 +103,7 @@ export interface AnswerRecord {
   problemId: number
   questionId: string
   questionType: QuestionType | LegacyQuestionType
+  questionFormat?: QuestionFormat
   correct: boolean
   answeredAt: string
 }

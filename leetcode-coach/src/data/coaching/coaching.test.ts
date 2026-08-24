@@ -10,9 +10,12 @@ describe('deterministic coaching catalog', () => {
     expect(validateCoachingContent(problems)).toEqual([])
   })
 
-  it('builds eight baseline stages and twelve deep stages', () => {
+  it('builds ten baseline stages and thirteen deep stages', () => {
     for (const problem of problems) {
-      expect(problem.questions).toHaveLength(DEEP_PROBLEM_IDS.has(problem.id) ? 12 : 8)
+      expect(problem.questions).toHaveLength(DEEP_PROBLEM_IDS.has(problem.id) ? 13 : 10)
+      expect(problem.questions[4].format).toBe('iteration-visualization')
+      expect(problem.questions.filter(({ format }) => format === 'algorithm-builder')).toHaveLength(1)
+      expect(problem.questions.filter(({ format }) => format === 'iteration-visualization')).toHaveLength(1)
     }
     expect(DEEP_PROBLEM_IDS).toHaveLength(30)
   })
@@ -23,9 +26,14 @@ describe('deterministic coaching catalog', () => {
       const second = compileQuestionPath(problem, problems)
       expect(first).toEqual(second)
       for (const question of first) {
-        expect(new Set(question.options)).toHaveLength(4)
-        expect(question.optionFeedback).toHaveLength(4)
-        expect(question.optionFeedback?.[question.answer]).toBe(question.explanation)
+        if (question.format === 'algorithm-builder') {
+          expect(new Set(question.builder?.steps.map(({ id }) => id))).toHaveLength(6)
+          expect(question.builder?.correctOrder).toHaveLength(4)
+        } else {
+          expect(new Set(question.options)).toHaveLength(4)
+          expect(question.optionFeedback).toHaveLength(4)
+          expect(question.optionFeedback?.[question.answer]).toBe(question.explanation)
+        }
       }
     }
   })
