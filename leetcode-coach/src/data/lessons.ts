@@ -47,7 +47,7 @@ export interface Lesson {
   level: 'Foundation' | 'Intermediate' | 'Advanced'
   minutes: number
   summary: string
-  mentalModel: string
+  mentalModel: string | string[]
   signals: string[]
   problemTypes: string[]
   avoidWhen: string[]
@@ -64,7 +64,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'arrays-hash-maps', title: 'Arrays & Hash Maps', category: 'Data Structure', icon: 'mdi-grid', level: 'Foundation', minutes: 35,
     summary: 'Turn repeated searches into direct lookups and use indexes to reason about contiguous data.',
-    mentalModel: 'An array is a numbered row of boxes; a hash map is a labeled index card pointing directly to a box. Arrays make position cheap. Hash maps make identity cheap. Many optimal solutions combine both: scan the array once while the map remembers exactly what the prefix has taught you.',
+    mentalModel: [
+      'An array is an ordered collection of elements addressed by integer indexes. Its index-based organization provides O(1) random access to an existing position, while inserting or deleting near the beginning or middle generally requires shifting elements and takes O(n) time.',
+      'A hash map stores associations between unique keys and values. It applies a hash function to each key to select an internal bucket, providing O(1) average lookup, insertion, and deletion when collisions remain well controlled.',
+      'Use an array when order, position, or contiguous traversal is central; use a hash map when the problem depends on keyed retrieval, membership, frequencies, or previously observed values. The structures are often combined by scanning an array in order while a map records information from the portion already processed.',
+    ],
     signals: ['You repeatedly ask “have I seen this value?”', 'The output needs an original index or frequency', 'A nested loop compares every pair', 'Order matters, but sorting would destroy useful positions'],
     problemTypes: ['Pair or complement search', 'Frequency counting and grouping', 'Prefix state and cumulative totals', 'Deduplication and membership', 'Index-to-value transformations'],
     avoidWhen: ['You need ordered predecessor or range queries', 'The key space is tiny enough for a fixed array', 'Worst-case deterministic lookup is mandatory'],
@@ -93,7 +97,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'linked-lists', title: 'Linked Lists', category: 'Data Structure', icon: 'mdi-link-variant', level: 'Foundation', minutes: 30,
     summary: 'Model sequences through references when local rewiring matters more than random access.',
-    mentalModel: 'A linked list is a treasure hunt: every node tells you where the next node lives. You cannot jump to position i, but once you hold a node, inserting or removing beside it is only pointer rewiring. Draw arrows before writing assignments—the old links disappear as soon as you overwrite them.',
+    mentalModel: [
+      'A linked list is an ordered collection of nodes connected by references. Each node stores a value and, in a singly linked list, a reference to the next node; the head identifies the first node and null ordinarily marks the end.',
+      'Linked lists do not provide constant-time indexed access because reaching a position requires following every preceding link, which takes O(n) time. Inserting or removing next to a node is O(1) once that node and any required predecessor are already known, because only a fixed number of references change.',
+      'Use a linked list when the input is already node-based or when local insertion, removal, splitting, or reordering is more important than random access. Before overwriting a reference, preserve any link still needed to reach the unprocessed portion of the list.',
+    ],
     signals: ['The input is already expressed as nodes', 'You must reverse or reconnect a sequence in place', 'Fast and slow movement can reveal structure', 'The problem asks about cycles, middles, or intersections'],
     problemTypes: ['In-place reversal', 'Cycle detection', 'Merging sorted chains', 'Finding the middle or kth-from-end node', 'Reordering and partitioning nodes'],
     avoidWhen: ['Frequent random indexed access is required', 'Cache locality and compact storage dominate', 'A dynamic array already provides cheap append and iteration'],
@@ -125,7 +133,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'stacks-queues', title: 'Stacks & Queues', category: 'Data Structure', icon: 'mdi-tray-full', level: 'Foundation', minutes: 31,
     summary: 'Use access order—last-in-first-out or first-in-first-out—to encode unfinished work.',
-    mentalModel: 'A stack is a pile of plates: the most recent unfinished item is resolved first. A queue is a checkout line: earlier discoveries are processed first. The question is not “can I store these items?” but “which pending item must I revisit next?”',
+    mentalModel: [
+      'A stack and a queue are abstract data types that restrict the order in which stored elements are removed. A stack follows last in, first out (LIFO), while a queue follows first in, first out (FIFO).',
+      'Stacks support push, pop, and peek at one end and are commonly used for nested scopes, undo operations, recursion, and monotonic processing. Queues add at the back and remove from the front, preserving arrival or discovery order for scheduling, buffering, and breadth-first traversal.',
+      'Choose between them according to which pending item must be processed next. Use a stack when the most recently discovered work must be completed first; use a queue when work must be processed in the order it was discovered.',
+    ],
     signals: ['Nested structures must close in reverse order', 'The nearest unresolved candidate matters', 'Work should be processed in discovery order', 'You need levels, layers, or shortest unweighted steps'],
     problemTypes: ['Balanced delimiters and expression parsing', 'Monotonic next-greater/smaller queries', 'Breadth-first traversal', 'Scheduling and buffering', 'Undo/history and iterative DFS'],
     avoidWhen: ['You need arbitrary removal or priority-based order', 'Items must be searched by key', 'A simple pointer over existing data already expresses the order'],
@@ -313,7 +325,11 @@ export const lessons: Lesson[] = [
         },
       ],
     },
-    mentalModel: 'A tree is recursive by construction: every child is the root of a smaller tree. Decide what information a subtree should return to its parent. In a binary search tree, ordering adds a compass—smaller values live left and larger values right—so entire branches can be discarded.',
+    mentalModel: [
+      'A rooted tree is a hierarchical collection of nodes connected by edges. One node is designated as the root, every other node has exactly one parent, and each node together with its descendants forms a subtree that is itself a tree.',
+      'A binary tree permits at most two children per node. A binary search tree adds an ordering invariant: values in a node’s left subtree are smaller and values in its right subtree are larger under the usual distinct-key definition; an ordinary binary tree does not provide this guarantee.',
+      'Tree algorithms usually process a node and recursively or iteratively combine information from its child subtrees. Use depth-first traversal for path and subtree computations, breadth-first traversal for level-based questions, and BST ordering only when the problem explicitly guarantees it.',
+    ],
     signals: ['The data has parent/child hierarchy', 'The answer depends on combining child results', 'You must enumerate root-to-leaf paths', 'Ordering lets you prune one subtree'],
     problemTypes: ['Depth, diameter, and balance', 'Lowest common ancestor', 'Serialization and reconstruction', 'Path sums and views', 'BST search, validation, and order statistics'],
     avoidWhen: ['The relationship is many-to-many rather than hierarchical', 'Data is flat and no hierarchy is used', 'A balanced BST is assumed but not guaranteed'],
@@ -338,7 +354,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'heaps', title: 'Heaps & Priority Queues', category: 'Data Structure', icon: 'mdi-triangle-outline', level: 'Intermediate', minutes: 32,
     summary: 'Continuously expose the most urgent item without fully sorting everything.',
-    mentalModel: 'A heap is a tournament podium, not a sorted list. It guarantees only that the winner is at the top. Removing the winner promotes and repairs in logarithmic time. This is exactly enough when you repeatedly need the current smallest or largest item.',
+    mentalModel: [
+      'A binary heap is a complete binary tree that satisfies a local ordering property. In a min-heap, every parent is less than or equal to its children; in a max-heap, every parent is greater than or equal to its children.',
+      'The root is therefore the global minimum or maximum, but the remaining elements are not fully sorted. Array-based heaps provide O(1) access to the root and O(log n) insertion or root removal by restoring heap order along one root-to-leaf path.',
+      'Use a heap when an algorithm repeatedly needs the current highest- or lowest-priority item, such as top-k selection, scheduling, merging sorted inputs, or shortest-path processing. A heap is not appropriate for efficient arbitrary-value search or sorted iteration.',
+    ],
     signals: ['You repeatedly need the smallest or largest remaining item', 'The problem asks for top k while data streams in', 'Events must be processed by time, distance, or cost', 'Sorting everything feels wasteful because only an extreme matters'],
     problemTypes: ['Top-k and kth-largest', 'Merge k sorted sequences', 'Scheduling and interval rooms', 'Dijkstra’s frontier', 'Running median using two heaps'],
     avoidWhen: ['You need fast arbitrary search', 'All output must be globally sorted once', 'The value domain is small enough for counting'],
@@ -367,7 +387,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'graphs', title: 'Graphs', category: 'Data Structure', icon: 'mdi-graph-outline', level: 'Intermediate', minutes: 40,
     summary: 'Represent arbitrary relationships, then explore each reachable state without losing track of visits.',
-    mentalModel: 'A graph is a map of places and connections. Unlike a tree, a place can have many parents and cycles can lead you back where you started. The visited set is not an optimization—it is often what makes the traversal terminate and what defines whether a state has already been solved.',
+    mentalModel: [
+      'A graph is a collection of vertices connected by edges and is used to represent arbitrary relationships. Edges may be directed or undirected and may carry weights such as distance, cost, or time.',
+      'Unlike a tree, a graph may contain cycles, multiple paths between vertices, and disconnected components. Adjacency lists store each vertex’s neighbors efficiently for sparse graphs, while adjacency matrices trade O(V²) space for constant-time edge lookup.',
+      'Use graph algorithms when the problem describes networks, dependencies, routes, transformations, or connectivity. Traversals must track visited vertices or an equivalent state when cycles are possible, and the correct path algorithm depends on edge direction and weight.',
+    ],
     signals: ['Entities are connected by arbitrary relationships', 'The input contains edges, dependencies, flights, roads, or transformations', 'You must find connected components or reachability', 'States can transition into other states'],
     problemTypes: ['Connected components and islands', 'Shortest unweighted paths', 'Cycle detection', 'Dependency ordering', 'Network propagation and state-space search'],
     avoidWhen: ['The relationship is strictly hierarchical and a tree is simpler', 'A grid can be processed directly without materializing adjacency', 'Only aggregate counts matter and edges are irrelevant'],
@@ -404,7 +428,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'two-pointers', title: 'Two Pointers', category: 'Algorithmic Pattern', icon: 'mdi-arrow-split-vertical', level: 'Foundation', minutes: 30,
     summary: 'Exploit ordering or opposing constraints so one pointer movement eliminates many candidates.',
-    mentalModel: 'Two pointers are two boundaries negotiating toward an answer. A movement must be justified: it should discard candidates that can no longer win. The pattern is powerful only when ordering, monotonicity, or a partition invariant proves that discarded work is irrelevant.',
+    mentalModel: [
+      'Two pointers is a traversal technique that maintains two indexes or node references with distinct roles. The pointers may begin at opposite ends, move in the same direction as read and write positions, or advance at different speeds.',
+      'Each movement must preserve an invariant and prove that discarded positions cannot be required by a future answer. Sorted order, monotonic behavior, or a finalized output partition commonly provides that proof and allows a quadratic comparison process to become linear.',
+      'Use two pointers for sorted pair searches, in-place compaction, symmetric comparisons, linked-list distance, and contiguous boundary problems. Do not apply opposite-end elimination to unsorted data unless another property justifies the movement.',
+    ],
     signals: ['The input is sorted or can be processed from both ends', 'You seek a pair under a sum or distance constraint', 'You must compact or partition in place', 'A brute-force solution enumerates pairs or intervals'],
     problemTypes: ['Pair sum in sorted data', 'Palindrome comparison', 'Container and trapping-water geometry', 'Deduplication and partitioning', 'Fast/slow cycle and sequence problems'],
     avoidWhen: ['No movement rule can safely eliminate candidates', 'The data needs keyed lookup rather than ordering', 'Sorting would violate index or streaming requirements'],
@@ -430,7 +458,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'sliding-window', title: 'Sliding Window', category: 'Algorithmic Pattern', icon: 'mdi-arrow-expand-horizontal', level: 'Intermediate', minutes: 32,
     summary: 'Maintain a contiguous candidate incrementally instead of recomputing every subarray or substring.',
-    mentalModel: 'A window is a living summary of one interval. The right edge admits new information; the left edge removes information until the invariant is valid again. The core design question is what state lets additions and removals happen cheaply.',
+    mentalModel: [
+      'A sliding window represents one contiguous range of an array or string using left and right boundaries. The algorithm maintains state that describes exactly the elements currently inside that range, such as a sum, frequency map, or distinct-value count.',
+      'A fixed-size window adds one entering element and removes one leaving element per step. A variable-size window expands the right boundary and advances the left boundary when necessary to restore a validity condition; each boundary ordinarily moves only forward, producing O(n) total movement.',
+      'Use sliding windows for contiguous subarray or substring problems when window state can be updated incrementally and invalidity can be repaired monotonically. It does not directly apply to non-contiguous subsequences, and sum-based windows may be invalid when arbitrary negative values are present.',
+    ],
     signals: ['The answer is a contiguous subarray or substring', 'You need a longest, shortest, or count under a condition', 'The condition changes predictably when an edge moves', 'Nested loops repeatedly summarize overlapping ranges'],
     problemTypes: ['Longest substring under a uniqueness/frequency rule', 'Minimum-length subarray meeting a target', 'Fixed-size rolling averages', 'Anagram and permutation windows', 'At-most-k distinct constraints'],
     avoidWhen: ['Negative values destroy the monotonic shrink rule for sum windows', 'The answer is a noncontiguous subsequence', 'Removing the left item cannot update state efficiently'],
@@ -457,7 +489,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'binary-search', title: 'Binary Search', category: 'Algorithmic Pattern', icon: 'mdi-call-split', level: 'Intermediate', minutes: 33,
     summary: 'Search a monotonic decision boundary by discarding half of the remaining possibilities.',
-    mentalModel: 'Binary search is broader than finding a value in a sorted array. It locates the first point where a monotonic statement changes from false to true. Once you can ask a yes/no feasibility question whose answer never flips back, you can search the answer space itself.',
+    mentalModel: [
+      'Binary search is an algorithm for locating a target or boundary in an ordered search space by comparing a midpoint and discarding one half of the remaining candidates after each iteration.',
+      'Exact-value search normally requires a sorted, randomly accessible collection. Boundary and answer-space variants instead require a monotonic predicate whose result changes direction at most once, such as false values followed permanently by true values.',
+      'Use binary search only after defining the candidate interval and the invariant for discarded values. A correct implementation reduces the search space to O(log n) midpoint checks, although each feasibility check may perform additional work.',
+    ],
     signals: ['Input is sorted or the answer space is ordered', 'A feasibility predicate is monotonic', 'Constraints demand O(log n)', 'The problem asks for minimum possible maximum or maximum possible minimum'],
     problemTypes: ['Exact lookup and insertion position', 'First/last occurrence', 'Search in rotated arrays', 'Capacity and rate optimization', 'Square roots and numeric thresholds'],
     avoidWhen: ['The predicate is not monotonic', 'Computing feasibility is more expensive than direct solving', 'The search boundaries cannot be defined safely'],
@@ -483,7 +519,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'graph-traversal', title: 'BFS & DFS', category: 'Algorithmic Pattern', icon: 'mdi-routes', level: 'Intermediate', minutes: 35,
     summary: 'Choose exploration order based on whether depth, layers, paths, or shortest steps matter.',
-    mentalModel: 'DFS follows one corridor until it ends, then backtracks. BFS sends a wave outward one distance layer at a time. Both can visit the same nodes in O(V + E); the right choice is determined by what the order of discovery means to the answer.',
+    mentalModel: [
+      'Breadth-first search (BFS) and depth-first search (DFS) are graph-traversal algorithms that systematically visit reachable vertices. Both maintain a frontier of discovered work and track visited state to prevent repeated processing and cycles.',
+      'BFS uses a FIFO queue and processes vertices in nondecreasing unweighted distance from the source, which makes first discovery a shortest-edge path. DFS uses recursion or a LIFO stack and completes one branch before returning to explore alternatives.',
+      'Use BFS for minimum-edge distance, nearest-target, and level-order questions. Use DFS for components, path exploration, subtree-style aggregation, and entry/exit processing; with adjacency lists, both require O(V + E) time for a full traversal.',
+    ],
     signals: ['You need reachability or component membership', 'The space consists of states and legal transitions', 'Shortest unweighted distance suggests layers', 'Path construction or subtree aggregation suggests depth'],
     problemTypes: ['Grid islands and flood fill', 'Shortest mutation or word ladder', 'Tree traversal and path enumeration', 'Cycle detection', 'Component counting'],
     avoidWhen: ['Edges have different weights and shortest distance is required', 'The state space is enormous without pruning', 'A topological or union-find formulation answers the question more directly'],
@@ -512,7 +552,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'greedy', title: 'Greedy Algorithms', category: 'Algorithmic Pattern', icon: 'mdi-chart-timeline-variant-shimmer', level: 'Advanced', minutes: 34,
     summary: 'Commit to a locally best choice only when an exchange argument proves no optimal solution is lost.',
-    mentalModel: 'Greedy is not “take what looks best.” It is “take a choice that some optimal solution can always be rearranged to include.” The implementation is often short; the proof is the algorithm. Look for a choice that leaves the most flexible future.',
+    mentalModel: [
+      'A greedy algorithm constructs a solution through a sequence of locally selected, irreversible choices. The choice rule is problem-specific and must preserve the existence of a globally optimal completion.',
+      'Correctness requires a proof, commonly an exchange argument, staying-ahead argument, or cut property, showing that an optimal solution can include the greedy choice without becoming worse. A plausible local heuristic without this property is not a valid greedy algorithm.',
+      'Use greedy methods when earlier alternatives can be summarized or safely discarded and the remaining problem retains the same structure. If locally optimal choices can block a better global combination, dynamic programming, search, or backtracking is required instead.',
+    ],
     signals: ['A local decision permanently simplifies the remaining problem', 'Intervals can be sorted by a strategic endpoint', 'You can exchange an optimal solution’s first choice with yours', 'Only a compact best-so-far state matters'],
     problemTypes: ['Interval scheduling and merging', 'Jump reachability', 'Resource assignment', 'Minimum removals or maximum compatible choices', 'One-pass profit and prefix decisions'],
     avoidWhen: ['A locally attractive choice can block a better combination', 'Future value depends on multiple unresolved state dimensions', 'No exchange, cut, or staying-ahead argument is available'],
@@ -540,7 +584,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'dynamic-programming', title: 'Dynamic Programming', category: 'Algorithmic Pattern', icon: 'mdi-table-large', level: 'Advanced', minutes: 38,
     summary: 'Name the state that captures all relevant history, then reuse overlapping subproblem answers.',
-    mentalModel: 'Dynamic programming is controlled forgetting. A state keeps exactly the history the future needs and discards everything else. The recurrence describes the final decision that leads into that state. Memoization evaluates states on demand; tabulation chooses an order where dependencies are already known.',
+    mentalModel: [
+      'Dynamic programming solves a problem by defining reusable subproblems, expressing each subproblem in terms of smaller states, and storing results so equivalent states are not recomputed. It is applicable when subproblems overlap and valid solutions have optimal or compositional substructure.',
+      'A state definition specifies exactly what one cached value means. Base cases solve the smallest states directly, and a recurrence enumerates the legal final decisions that lead into the current state; evaluation order must ensure every dependency is already available.',
+      'Memoization evaluates recursive states on demand, while tabulation fills a table in dependency order. Use dynamic programming when many decision paths reach the same state; compress space only after identifying which earlier states future transitions still require.',
+    ],
     signals: ['Brute force branches into repeated subproblems', 'The answer asks for a count, optimum, or feasibility over choices', 'A prefix/index plus a small amount of state determines the future', 'The problem has optimal substructure but greedy choices are unsafe'],
     problemTypes: ['Sequence and grid optimization', 'Knapsack and subset decisions', 'String alignment and edit distance', 'Counting paths or constructions', 'State-machine stock problems'],
     avoidWhen: ['Subproblems do not overlap', 'The state needs essentially the entire history', 'A greedy invariant or closed form solves the problem directly'],
@@ -564,7 +612,11 @@ export const lessons: Lesson[] = [
   {
     slug: 'backtracking', title: 'Backtracking', category: 'Algorithmic Pattern', icon: 'mdi-source-branch', level: 'Advanced', minutes: 36,
     summary: 'Explore a decision tree while undoing choices and pruning branches that cannot produce valid answers.',
-    mentalModel: 'Backtracking is depth-first search over choices. The current path is a whiteboard: make a choice, recurse, then erase it exactly once. Constraints are valuable because they let you stop exploring a branch before it reaches a complete candidate.',
+    mentalModel: [
+      'Backtracking is depth-first search over a decision tree whose nodes represent partial candidates and whose edges represent choices. The active recursion path contains the decisions used to construct the current candidate.',
+      'Each branch follows a choose, explore, and unchoose sequence: apply one legal choice, recurse into the resulting state, then restore every mutation before examining a sibling choice. Pruning ends a branch as soon as its partial state cannot produce an eligible solution.',
+      'Use backtracking to enumerate combinations, permutations, placements, and constraint-satisfying paths when the search space is manageable or can be pruned. When different branches repeatedly reach an equivalent state and only a count or optimum is needed, dynamic programming may be more appropriate.',
+    ],
     signals: ['The output asks for all combinations, permutations, or arrangements', 'Each position has a small set of choices', 'Partial candidates can be proven invalid', 'The search space is exponential but constraints are modest'],
     problemTypes: ['Subsets, permutations, and combinations', 'Sudoku and constraint placement', 'Word search and grid paths', 'Palindrome partitioning', 'Expression construction'],
     avoidWhen: ['Only an optimum is needed and DP can merge equivalent states', 'The branching space is huge with little pruning', 'A direct combinatorial formula answers the question'],

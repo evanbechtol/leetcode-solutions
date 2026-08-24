@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { lessons } from '../data/lessons'
 import TreeDiagramNode from '../components/TreeDiagramNode.vue'
@@ -21,7 +21,10 @@ const filteredLessons = computed(() => {
   })
 })
 
-watch(() => route.params.slug, () => window.scrollTo({ top: 0, behavior: 'smooth' }))
+function mentalModelParagraphs(model: string | string[]) {
+  return Array.isArray(model) ? model : [model]
+}
+
 </script>
 
 <template>
@@ -112,7 +115,12 @@ watch(() => route.params.slug, () => window.scrollTo({ top: 0, behavior: 'smooth
 
           <section class="lesson-section mental-model">
             <div class="section-heading-row"><span>01</span><div><div class="eyebrow">Mental model</div><h2>Make it intuitive</h2></div></div>
-            <p>{{ lesson.mentalModel }}</p>
+            <div class="mental-model-copy" :class="{ segmented: mentalModelParagraphs(lesson.mentalModel).length > 1 }">
+              <p v-for="(paragraph, index) in mentalModelParagraphs(lesson.mentalModel)" :key="paragraph">
+                <span v-if="mentalModelParagraphs(lesson.mentalModel).length > 1" class="mental-block-marker">{{ String(index + 1).padStart(2, '0') }}</span>
+                <span>{{ paragraph }}</span>
+              </p>
+            </div>
           </section>
 
           <section v-if="lesson.deepDive" class="lesson-section deep-dive-section">

@@ -29,9 +29,12 @@ const vuetify = createVuetify({
 
 const router = createRouter({
   history: createWebHashHistory(),
+  scrollBehavior() {
+    return { left: 0, top: 0 }
+  },
   routes: [
     { path: '/', component: QuizView },
-    { path: '/learn/:slug?', component: () => import('./views/LearnView.vue') },
+    { path: '/learn/:slug?', name: 'learn', component: () => import('./views/LearnView.vue') },
     { path: '/profile', component: ProfileView },
   ],
 })
