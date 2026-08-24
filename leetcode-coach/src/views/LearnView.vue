@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { lessons } from '../data/lessons'
+import TreeDiagramNode from '../components/TreeDiagramNode.vue'
 
 const route = useRoute()
 const search = ref('')
@@ -112,6 +113,62 @@ watch(() => route.params.slug, () => window.scrollTo({ top: 0, behavior: 'smooth
           <section class="lesson-section mental-model">
             <div class="section-heading-row"><span>01</span><div><div class="eyebrow">Mental model</div><h2>Make it intuitive</h2></div></div>
             <p>{{ lesson.mentalModel }}</p>
+          </section>
+
+          <section v-if="lesson.deepDive" class="lesson-section deep-dive-section">
+            <div class="section-heading-row"><span>01A</span><div><div class="eyebrow">Foundations</div><h2>{{ lesson.deepDive.title }}</h2></div></div>
+
+            <div class="deep-introduction">
+              <p v-for="paragraph in lesson.deepDive.introduction" :key="paragraph">{{ paragraph }}</p>
+            </div>
+
+            <div class="tree-fact-strip">
+              <div v-for="fact in lesson.deepDive.facts" :key="fact.label"><strong>{{ fact.value }}</strong><span>{{ fact.label }}</span></div>
+            </div>
+
+            <div v-if="lesson.deepDive.models?.length" class="fundamental-model-grid mt-8">
+              <article v-for="model in lesson.deepDive.models" :key="model.title" class="fundamental-model">
+                <header><h3>{{ model.title }}</h3><p>{{ model.description }}</p></header>
+                <div class="fundamental-model-items">
+                  <div v-for="item in model.items" :key="`${item.label}-${item.value}`" :class="item.tone ? `tone-${item.tone}` : ''">
+                    <small>{{ item.label }}</small><strong>{{ item.value }}</strong>
+                  </div>
+                </div>
+                <footer v-if="model.note"><v-icon icon="mdi-information-outline" size="16" /> {{ model.note }}</footer>
+              </article>
+            </div>
+
+            <article v-if="lesson.deepDive.diagram" class="tree-illustration mt-8">
+              <div class="tree-illustration-heading"><div><div class="eyebrow">Anatomy</div><h3>What a tree looks like</h3></div><div class="tree-legend"><span><i class="root" /> Root</span><span><i class="internal" /> Internal</span><span><i class="leaf" /> Leaf</span></div></div>
+              <div class="tree-diagram-scroll"><TreeDiagramNode :node="lesson.deepDive.diagram.root" /></div>
+              <p>{{ lesson.deepDive.diagram.caption }}</p>
+            </article>
+
+            <div class="deep-subheading"><div class="eyebrow">Language of trees</div><h3>Core vocabulary</h3></div>
+            <div class="tree-vocabulary">
+              <article v-for="item in lesson.deepDive.vocabulary" :key="item.term"><strong>{{ item.term }}</strong><p>{{ item.definition }}</p></article>
+            </div>
+
+            <div class="deep-subheading"><div class="eyebrow">Representation</div><h3>How the idea appears in code</h3><p>Recognize both the conceptual model and the concrete form a problem uses to give it to you.</p></div>
+            <div class="representation-list">
+              <article v-for="(item, index) in lesson.deepDive.representations" :key="item.title" class="representation-card">
+                <div class="representation-copy"><span>{{ String(index + 1).padStart(2, '0') }}</span><h4>{{ item.title }}</h4><small>{{ item.bestFor }}</small><p>{{ item.description }}</p></div>
+                <pre><code>{{ item.code }}</code></pre>
+              </article>
+            </div>
+
+            <div class="deep-subheading"><div class="eyebrow">Core algorithms</div><h3>How to explore a tree</h3><p>Every full traversal visits the same nodes. The frontier data structure and visit order determine what information becomes available first.</p></div>
+            <div class="tree-algorithm-list">
+              <article v-for="(algorithm, index) in lesson.deepDive.algorithms" :key="algorithm.title" class="tree-algorithm-card">
+                <header><span>{{ String(index + 1).padStart(2, '0') }}</span><div><small>{{ algorithm.label }}</small><h4>{{ algorithm.title }}</h4></div></header>
+                <p class="algorithm-summary">{{ algorithm.summary }}</p>
+                <div v-if="algorithm.invariant" class="algorithm-invariant"><strong>Invariant</strong><p>{{ algorithm.invariant }}</p></div>
+                <div class="algorithm-use"><strong>Reach for it when</strong><p>{{ algorithm.useWhen }}</p></div>
+                <div class="algorithm-example"><strong>Trace on the example tree</strong><ol><li v-for="step in algorithm.example" :key="step">{{ step }}</li></ol></div>
+                <div class="algorithm-code"><div>TypeScript</div><pre><code>{{ algorithm.code }}</code></pre></div>
+                <footer><v-icon icon="mdi-chart-timeline-variant" size="17" /><span>{{ algorithm.complexity }}</span></footer>
+              </article>
+            </div>
           </section>
 
           <section class="lesson-section">

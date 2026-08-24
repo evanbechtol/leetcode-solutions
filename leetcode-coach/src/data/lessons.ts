@@ -1,9 +1,42 @@
+import { expandedLessonDeepDives } from './deepDives'
+
 export interface LessonFrame {
   label: string
   values: string[]
   active?: number[]
   settled?: number[]
   note: string
+}
+
+export interface LessonDiagramNode {
+  value: string
+  role: 'root' | 'internal' | 'leaf'
+  children?: LessonDiagramNode[]
+}
+
+export interface LessonDeepDive {
+  title: string
+  introduction: string[]
+  facts: { value: string; label: string }[]
+  diagram?: { caption: string; root: LessonDiagramNode }
+  models?: {
+    title: string
+    description: string
+    items: { label: string; value: string; tone?: 'primary' | 'secondary' | 'accent' }[]
+    note?: string
+  }[]
+  vocabulary: { term: string; definition: string }[]
+  representations: { title: string; bestFor: string; description: string; code: string }[]
+  algorithms: {
+    title: string
+    label: string
+    summary: string
+    invariant?: string
+    useWhen: string
+    example: string[]
+    code: string
+    complexity: string
+  }[]
 }
 
 export interface Lesson {
@@ -24,11 +57,12 @@ export interface Lesson {
   code: string
   pitfalls: string[]
   relatedTopics: string[]
+  deepDive?: LessonDeepDive
 }
 
 export const lessons: Lesson[] = [
   {
-    slug: 'arrays-hash-maps', title: 'Arrays & Hash Maps', category: 'Data Structure', icon: 'mdi-grid', level: 'Foundation', minutes: 14,
+    slug: 'arrays-hash-maps', title: 'Arrays & Hash Maps', category: 'Data Structure', icon: 'mdi-grid', level: 'Foundation', minutes: 35,
     summary: 'Turn repeated searches into direct lookups and use indexes to reason about contiguous data.',
     mentalModel: 'An array is a numbered row of boxes; a hash map is a labeled index card pointing directly to a box. Arrays make position cheap. Hash maps make identity cheap. Many optimal solutions combine both: scan the array once while the map remembers exactly what the prefix has taught you.',
     signals: ['You repeatedly ask “have I seen this value?”', 'The output needs an original index or frequency', 'A nested loop compares every pair', 'Order matters, but sorting would destroy useful positions'],
@@ -57,7 +91,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Array', 'Hash Table'],
   },
   {
-    slug: 'linked-lists', title: 'Linked Lists', category: 'Data Structure', icon: 'mdi-link-variant', level: 'Foundation', minutes: 13,
+    slug: 'linked-lists', title: 'Linked Lists', category: 'Data Structure', icon: 'mdi-link-variant', level: 'Foundation', minutes: 30,
     summary: 'Model sequences through references when local rewiring matters more than random access.',
     mentalModel: 'A linked list is a treasure hunt: every node tells you where the next node lives. You cannot jump to position i, but once you hold a node, inserting or removing beside it is only pointer rewiring. Draw arrows before writing assignments—the old links disappear as soon as you overwrite them.',
     signals: ['The input is already expressed as nodes', 'You must reverse or reconnect a sequence in place', 'Fast and slow movement can reveal structure', 'The problem asks about cycles, middles, or intersections'],
@@ -89,7 +123,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Linked List', 'Two Pointers'],
   },
   {
-    slug: 'stacks-queues', title: 'Stacks & Queues', category: 'Data Structure', icon: 'mdi-tray-full', level: 'Foundation', minutes: 12,
+    slug: 'stacks-queues', title: 'Stacks & Queues', category: 'Data Structure', icon: 'mdi-tray-full', level: 'Foundation', minutes: 31,
     summary: 'Use access order—last-in-first-out or first-in-first-out—to encode unfinished work.',
     mentalModel: 'A stack is a pile of plates: the most recent unfinished item is resolved first. A queue is a checkout line: earlier discoveries are processed first. The question is not “can I store these items?” but “which pending item must I revisit next?”',
     signals: ['Nested structures must close in reverse order', 'The nearest unresolved candidate matters', 'Work should be processed in discovery order', 'You need levels, layers, or shortest unweighted steps'],
@@ -119,8 +153,166 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Stack', 'Queue', 'Monotonic Stack'],
   },
   {
-    slug: 'trees', title: 'Trees & Binary Search Trees', category: 'Data Structure', icon: 'mdi-file-tree-outline', level: 'Intermediate', minutes: 17,
-    summary: 'Decompose hierarchical problems into a node decision plus answers from independent subtrees.',
+    slug: 'trees', title: 'Trees & Binary Search Trees', category: 'Data Structure', icon: 'mdi-file-tree-outline', level: 'Intermediate', minutes: 32,
+    summary: 'Learn how trees model hierarchy, how they live in memory, and how leaf detection, DFS, BFS, and BST search explore them.',
+    deepDive: {
+      title: 'Tree foundations',
+      introduction: [
+        'A tree is a connected graph with no cycles. Between any two nodes there is exactly one simple path. A tree with n nodes always has n - 1 edges. Those properties are what make it possible to explore a branch without worrying that it will loop back—unless the input is represented as an undirected adjacency list, where you still track the parent or a visited set.',
+        'A rooted tree chooses one node as the root and gives every other node exactly one parent. That creates direction: away from the root toward children, and back toward ancestors. Trees are useful because many hierarchical problems become the same smaller problem applied recursively to each child subtree.',
+        'A binary tree allows at most two children named left and right. A binary search tree (BST) adds an ordering invariant: every value in a node’s left subtree is smaller, and every value in its right subtree is larger under the usual distinct-key definition. A binary tree is not automatically a BST.',
+        'Trees preserve relationships that a flat array would erase. File systems and the browser DOM model containment; syntax trees model expressions; tries model shared prefixes; balanced search trees support ordered lookup and range operations. The shape matters: hierarchy is available in any tree, but fast ordered search requires a maintained BST invariant and controlled height.',
+      ],
+      facts: [
+        { value: 'n - 1', label: 'edges for n nodes' },
+        { value: '1', label: 'unique path per pair' },
+        { value: '≤ 2', label: 'children in a binary tree' },
+        { value: 'O(h)', label: 'typical DFS stack' },
+      ],
+      diagram: {
+        caption: 'A binary search tree rooted at 8. Green nodes are leaves: they have no children.',
+        root: {
+          value: '8', role: 'root', children: [
+            { value: '3', role: 'internal', children: [
+              { value: '1', role: 'leaf' },
+              { value: '6', role: 'leaf' },
+            ] },
+            { value: '10', role: 'internal', children: [
+              { value: '9', role: 'leaf' },
+              { value: '14', role: 'leaf' },
+            ] },
+          ],
+        },
+      },
+      vocabulary: [
+        { term: 'Root', definition: 'The only node with no parent; the entry point for a rooted tree.' },
+        { term: 'Edge', definition: 'A connection between two nodes. In a rooted tree it links a parent and child.' },
+        { term: 'Parent / child', definition: 'Adjacent nodes one step closer to or farther from the root.' },
+        { term: 'Sibling', definition: 'Nodes that share the same parent.' },
+        { term: 'Leaf', definition: 'A node with no children. In a binary tree: left === null and right === null.' },
+        { term: 'Internal node', definition: 'Any node with at least one child.' },
+        { term: 'Ancestor', definition: 'A node on the path from the root to a given node; descendants reverse that relation.' },
+        { term: 'Subtree', definition: 'A node together with every descendant below it. A subtree is itself a tree.' },
+        { term: 'Depth', definition: 'Number of edges from the root to a node. The root has depth 0.' },
+        { term: 'Height', definition: 'Longest downward path from a node to a leaf. State whether you count edges or nodes.' },
+        { term: 'Width', definition: 'Number of nodes on one level. Maximum width controls peak BFS queue space.' },
+        { term: 'Balanced', definition: 'Height stays proportional to log n. “Balanced” needs a precise invariant for the tree type.' },
+      ],
+      representations: [
+        {
+          title: 'Linked nodes',
+          bestFor: 'Binary-tree LeetCode problems',
+          description: 'Each object stores a value and references to its children. null marks a missing child. The shape lives in the references, not in indexes.',
+          code: `class TreeNode {
+  constructor(
+    public val: number,
+    public left: TreeNode | null = null,
+    public right: TreeNode | null = null,
+  ) {}
+}`,
+        },
+        {
+          title: 'Adjacency list',
+          bestFor: 'General or undirected trees',
+          description: 'Store every node’s neighbors. Because each edge appears in both directions, DFS/BFS must remember the parent or maintain a visited set.',
+          code: `const neighbors = new Map<number, number[]>([
+  [8, [3, 10]],
+  [3, [8, 1, 6]],
+  [10, [8, 9, 14]],
+])`,
+        },
+        {
+          title: 'Level-order array',
+          bestFor: 'Input, output, and serialization',
+          description: 'LeetCode writes trees breadth-first, using null for missing positions. The array is a transport format that is converted into linked nodes before your function runs.',
+          code: `[8, 3, 10, 1, 6, 9, 14]
+
+// Dense heap-style arrays can use:
+// left(i)  = 2 * i + 1
+// right(i) = 2 * i + 2`,
+        },
+      ],
+      algorithms: [
+        {
+          title: 'Find every leaf',
+          label: 'Base case recognition',
+          summary: 'A leaf is detected locally: the node exists and has no left or right child. Once found, record it and stop descending that path. Do not confuse a node with one missing child for a leaf.',
+          invariant: 'Every completed recursive call returns all and only the leaves in that node’s subtree, from left to right.',
+          useWhen: 'Collecting boundaries, comparing leaf sequences, pruning, summing terminal paths, or defining recursion base cases.',
+          example: ['Visit 8 → recurse', 'Visit 3 → recurse', '1 is a leaf → collect', '6 is a leaf → collect', '9 and 14 are leaves → collect', 'Result: [1, 6, 9, 14]'],
+          code: `function collectLeaves(root: TreeNode | null): number[] {
+  if (!root) return []
+  if (!root.left && !root.right) return [root.val]
+  return [
+    ...collectLeaves(root.left),
+    ...collectLeaves(root.right),
+  ]
+}`,
+          complexity: 'O(n) time because each node is checked once; O(h) call-stack space, plus the output.',
+        },
+        {
+          title: 'Depth-first search (DFS)',
+          label: 'Go deep, then backtrack',
+          summary: 'DFS completely explores one subtree before its sibling. Recursion uses the call stack implicitly; iterative DFS uses an explicit stack. The moment you process the root determines the traversal order.',
+          invariant: 'On entry to dfs(node), the active call stack is the unique path from the root to node; when the call returns, that entire subtree has been processed.',
+          useWhen: 'Subtree calculations, path questions, structural validation, backtracking, serialization, or when memory should scale with height rather than width.',
+          example: ['Preorder · root, left, right → 8, 3, 1, 6, 10, 9, 14', 'Inorder · left, root, right → 1, 3, 6, 8, 9, 10, 14', 'Postorder · left, right, root → 1, 6, 3, 9, 14, 10, 8', 'Inorder is sorted only because this example is a BST.'],
+          code: `function dfs(node: TreeNode | null): void {
+  if (!node) return              // empty subtree
+  visit(node)                    // preorder position
+  dfs(node.left)
+  // visit(node)                 // inorder position
+  dfs(node.right)
+  // visit(node)                 // postorder position
+}`,
+          complexity: 'O(n) time for a full traversal; O(h) stack space—O(log n) when balanced and O(n) when skewed.',
+        },
+        {
+          title: 'Breadth-first search (BFS)',
+          label: 'Explore one level at a time',
+          summary: 'BFS uses a queue. The queue’s current length tells you exactly how many nodes belong to the next level. In an unweighted tree, the first time BFS reaches a node is through the minimum number of edges from the start.',
+          invariant: 'At the start of each outer iteration, every unprocessed queue entry belongs to the same next level; children appended during that iteration belong to the following level.',
+          useWhen: 'Level order, minimum depth, nearest target, right/left side views, per-level averages, or any prompt involving distance from the root.',
+          example: ['Queue starts [8]', 'Level 0 → [8]; enqueue 3, 10', 'Level 1 → [3, 10]; enqueue 1, 6, 9, 14', 'Level 2 → [1, 6, 9, 14]', 'Result: [[8], [3, 10], [1, 6, 9, 14]]'],
+          code: `function levelOrder(root: TreeNode | null): number[][] {
+  if (!root) return []
+  const queue = [root]
+  const levels: number[][] = []
+
+  for (let front = 0; front < queue.length;) {
+    const levelSize = queue.length - front
+    const level: number[] = []
+    for (let i = 0; i < levelSize; i++) {
+      const node = queue[front++]
+      level.push(node.val)
+      if (node.left) queue.push(node.left)
+      if (node.right) queue.push(node.right)
+    }
+    levels.push(level)
+  }
+  return levels
+}`,
+          complexity: 'O(n) time; O(w) auxiliary space where w is the tree’s maximum width (O(n) in the worst case).',
+        },
+        {
+          title: 'Search a binary search tree',
+          label: 'Use the ordering invariant',
+          summary: 'Compare the target with the current value. Equality finishes; a smaller target can only be in the left subtree, and a larger target only in the right. This pruning is the feature a plain binary tree does not provide.',
+          invariant: 'If the target exists, it remains inside the subtree rooted at node. Each comparison discards a subtree that cannot contain it under BST ordering.',
+          useWhen: 'The prompt explicitly guarantees BST ordering and asks for search, insertion, bounds, successor/predecessor, or ordered statistics.',
+          example: ['Find 9: start at 8', '9 > 8 → discard the entire left subtree', '9 < 10 → go left', '9 === 9 → found after three comparisons'],
+          code: `function searchBST(root: TreeNode | null, target: number) {
+  let node = root
+  while (node) {
+    if (node.val === target) return node
+    node = target < node.val ? node.left : node.right
+  }
+  return null
+}`,
+          complexity: 'O(h) time and O(1) iterative space. That is O(log n) when balanced but O(n) for a skewed BST.',
+        },
+      ],
+    },
     mentalModel: 'A tree is recursive by construction: every child is the root of a smaller tree. Decide what information a subtree should return to its parent. In a binary search tree, ordering adds a compass—smaller values live left and larger values right—so entire branches can be discarded.',
     signals: ['The data has parent/child hierarchy', 'The answer depends on combining child results', 'You must enumerate root-to-leaf paths', 'Ordering lets you prune one subtree'],
     problemTypes: ['Depth, diameter, and balance', 'Lowest common ancestor', 'Serialization and reconstruction', 'Path sums and views', 'BST search, validation, and order statistics'],
@@ -144,7 +336,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Tree', 'Binary Tree', 'Binary Search Tree'],
   },
   {
-    slug: 'heaps', title: 'Heaps & Priority Queues', category: 'Data Structure', icon: 'mdi-triangle-outline', level: 'Intermediate', minutes: 14,
+    slug: 'heaps', title: 'Heaps & Priority Queues', category: 'Data Structure', icon: 'mdi-triangle-outline', level: 'Intermediate', minutes: 32,
     summary: 'Continuously expose the most urgent item without fully sorting everything.',
     mentalModel: 'A heap is a tournament podium, not a sorted list. It guarantees only that the winner is at the top. Removing the winner promotes and repairs in logarithmic time. This is exactly enough when you repeatedly need the current smallest or largest item.',
     signals: ['You repeatedly need the smallest or largest remaining item', 'The problem asks for top k while data streams in', 'Events must be processed by time, distance, or cost', 'Sorting everything feels wasteful because only an extreme matters'],
@@ -173,7 +365,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Heap', 'Priority Queue', 'Sorting'],
   },
   {
-    slug: 'graphs', title: 'Graphs', category: 'Data Structure', icon: 'mdi-graph-outline', level: 'Intermediate', minutes: 18,
+    slug: 'graphs', title: 'Graphs', category: 'Data Structure', icon: 'mdi-graph-outline', level: 'Intermediate', minutes: 40,
     summary: 'Represent arbitrary relationships, then explore each reachable state without losing track of visits.',
     mentalModel: 'A graph is a map of places and connections. Unlike a tree, a place can have many parents and cycles can lead you back where you started. The visited set is not an optimization—it is often what makes the traversal terminate and what defines whether a state has already been solved.',
     signals: ['Entities are connected by arbitrary relationships', 'The input contains edges, dependencies, flights, roads, or transformations', 'You must find connected components or reachability', 'States can transition into other states'],
@@ -210,7 +402,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Graph', 'Breadth-First Search', 'Depth-First Search'],
   },
   {
-    slug: 'two-pointers', title: 'Two Pointers', category: 'Algorithmic Pattern', icon: 'mdi-arrow-split-vertical', level: 'Foundation', minutes: 12,
+    slug: 'two-pointers', title: 'Two Pointers', category: 'Algorithmic Pattern', icon: 'mdi-arrow-split-vertical', level: 'Foundation', minutes: 30,
     summary: 'Exploit ordering or opposing constraints so one pointer movement eliminates many candidates.',
     mentalModel: 'Two pointers are two boundaries negotiating toward an answer. A movement must be justified: it should discard candidates that can no longer win. The pattern is powerful only when ordering, monotonicity, or a partition invariant proves that discarded work is irrelevant.',
     signals: ['The input is sorted or can be processed from both ends', 'You seek a pair under a sum or distance constraint', 'You must compact or partition in place', 'A brute-force solution enumerates pairs or intervals'],
@@ -236,7 +428,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Two Pointers', 'Array', 'String'],
   },
   {
-    slug: 'sliding-window', title: 'Sliding Window', category: 'Algorithmic Pattern', icon: 'mdi-arrow-expand-horizontal', level: 'Intermediate', minutes: 15,
+    slug: 'sliding-window', title: 'Sliding Window', category: 'Algorithmic Pattern', icon: 'mdi-arrow-expand-horizontal', level: 'Intermediate', minutes: 32,
     summary: 'Maintain a contiguous candidate incrementally instead of recomputing every subarray or substring.',
     mentalModel: 'A window is a living summary of one interval. The right edge admits new information; the left edge removes information until the invariant is valid again. The core design question is what state lets additions and removals happen cheaply.',
     signals: ['The answer is a contiguous subarray or substring', 'You need a longest, shortest, or count under a condition', 'The condition changes predictably when an edge moves', 'Nested loops repeatedly summarize overlapping ranges'],
@@ -263,7 +455,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Sliding Window', 'String', 'Hash Table'],
   },
   {
-    slug: 'binary-search', title: 'Binary Search', category: 'Algorithmic Pattern', icon: 'mdi-call-split', level: 'Intermediate', minutes: 15,
+    slug: 'binary-search', title: 'Binary Search', category: 'Algorithmic Pattern', icon: 'mdi-call-split', level: 'Intermediate', minutes: 33,
     summary: 'Search a monotonic decision boundary by discarding half of the remaining possibilities.',
     mentalModel: 'Binary search is broader than finding a value in a sorted array. It locates the first point where a monotonic statement changes from false to true. Once you can ask a yes/no feasibility question whose answer never flips back, you can search the answer space itself.',
     signals: ['Input is sorted or the answer space is ordered', 'A feasibility predicate is monotonic', 'Constraints demand O(log n)', 'The problem asks for minimum possible maximum or maximum possible minimum'],
@@ -289,7 +481,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Binary Search', 'Array'],
   },
   {
-    slug: 'graph-traversal', title: 'BFS & DFS', category: 'Algorithmic Pattern', icon: 'mdi-routes', level: 'Intermediate', minutes: 16,
+    slug: 'graph-traversal', title: 'BFS & DFS', category: 'Algorithmic Pattern', icon: 'mdi-routes', level: 'Intermediate', minutes: 35,
     summary: 'Choose exploration order based on whether depth, layers, paths, or shortest steps matter.',
     mentalModel: 'DFS follows one corridor until it ends, then backtracks. BFS sends a wave outward one distance layer at a time. Both can visit the same nodes in O(V + E); the right choice is determined by what the order of discovery means to the answer.',
     signals: ['You need reachability or component membership', 'The space consists of states and legal transitions', 'Shortest unweighted distance suggests layers', 'Path construction or subtree aggregation suggests depth'],
@@ -318,7 +510,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Breadth-First Search', 'Depth-First Search', 'Graph'],
   },
   {
-    slug: 'greedy', title: 'Greedy Algorithms', category: 'Algorithmic Pattern', icon: 'mdi-chart-timeline-variant-shimmer', level: 'Advanced', minutes: 17,
+    slug: 'greedy', title: 'Greedy Algorithms', category: 'Algorithmic Pattern', icon: 'mdi-chart-timeline-variant-shimmer', level: 'Advanced', minutes: 34,
     summary: 'Commit to a locally best choice only when an exchange argument proves no optimal solution is lost.',
     mentalModel: 'Greedy is not “take what looks best.” It is “take a choice that some optimal solution can always be rearranged to include.” The implementation is often short; the proof is the algorithm. Look for a choice that leaves the most flexible future.',
     signals: ['A local decision permanently simplifies the remaining problem', 'Intervals can be sorted by a strategic endpoint', 'You can exchange an optimal solution’s first choice with yours', 'Only a compact best-so-far state matters'],
@@ -346,7 +538,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Greedy', 'Sorting', 'Intervals'],
   },
   {
-    slug: 'dynamic-programming', title: 'Dynamic Programming', category: 'Algorithmic Pattern', icon: 'mdi-table-large', level: 'Advanced', minutes: 21,
+    slug: 'dynamic-programming', title: 'Dynamic Programming', category: 'Algorithmic Pattern', icon: 'mdi-table-large', level: 'Advanced', minutes: 38,
     summary: 'Name the state that captures all relevant history, then reuse overlapping subproblem answers.',
     mentalModel: 'Dynamic programming is controlled forgetting. A state keeps exactly the history the future needs and discards everything else. The recurrence describes the final decision that leads into that state. Memoization evaluates states on demand; tabulation chooses an order where dependencies are already known.',
     signals: ['Brute force branches into repeated subproblems', 'The answer asks for a count, optimum, or feasibility over choices', 'A prefix/index plus a small amount of state determines the future', 'The problem has optimal substructure but greedy choices are unsafe'],
@@ -370,7 +562,7 @@ export const lessons: Lesson[] = [
     relatedTopics: ['Dynamic Programming', 'Memoization', 'Tabulation'],
   },
   {
-    slug: 'backtracking', title: 'Backtracking', category: 'Algorithmic Pattern', icon: 'mdi-source-branch', level: 'Advanced', minutes: 17,
+    slug: 'backtracking', title: 'Backtracking', category: 'Algorithmic Pattern', icon: 'mdi-source-branch', level: 'Advanced', minutes: 36,
     summary: 'Explore a decision tree while undoing choices and pruning branches that cannot produce valid answers.',
     mentalModel: 'Backtracking is depth-first search over choices. The current path is a whiteboard: make a choice, recurse, then erase it exactly once. Constraints are valuable because they let you stop exploring a branch before it reaches a complete candidate.',
     signals: ['The output asks for all combinations, permutations, or arrangements', 'Each position has a small set of choices', 'Partial candidates can be proven invalid', 'The search space is exponential but constraints are modest'],
@@ -398,4 +590,7 @@ export const lessons: Lesson[] = [
     pitfalls: ['Pushing the same mutable path reference into every result.', 'Forgetting to undo a choice after recursion.', 'Using backtracking for a problem that asks only for a count and has overlapping states.'],
     relatedTopics: ['Backtracking', 'Recursion', 'Depth-First Search'],
   },
-]
+].map((lesson) => ({
+  ...lesson,
+  deepDive: lesson.deepDive ?? expandedLessonDeepDives[lesson.slug],
+}))
