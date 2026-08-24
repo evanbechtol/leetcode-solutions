@@ -56,7 +56,7 @@ const strongest = computed(() => [...store.typeStats].filter((stat) => stat.tota
       <div class="section-heading"><div><span class="eyebrow">Practice modes</span><h2>Accuracy by interaction</h2><p class="section-copy">See whether you recognize an answer, construct the algorithm, and follow its state equally well.</p></div></div>
       <div class="format-stat-grid mt-6">
         <article v-for="stat in store.formatStats" :key="stat.format" class="format-stat">
-          <v-icon :icon="stat.format === 'algorithm-builder' ? 'mdi-code-braces' : stat.format === 'iteration-visualization' ? 'mdi-motion-play-outline' : 'mdi-format-list-checks'" />
+          <v-icon :icon="['algorithm-builder', 'code-construction'].includes(stat.format) ? 'mdi-code-braces' : stat.format === 'iteration-visualization' ? 'mdi-motion-play-outline' : 'mdi-format-list-checks'" />
           <div><span>{{ stat.label }}</span><strong>{{ stat.total ? `${stat.accuracy}%` : '—' }}</strong><small>{{ stat.correct }} correct · {{ stat.total }} attempts</small></div>
         </article>
       </div>

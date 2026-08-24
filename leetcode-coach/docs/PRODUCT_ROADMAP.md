@@ -23,8 +23,8 @@ Pathfinder should teach users how to derive an optimal solution, not merely reco
 3. Recognize the appropriate algorithmic pattern using the established state and structural signals.
 4. Define the maintained state and invariant.
 5. Follow how that state changes during execution.
-6. Construct the algorithm in dependency order.
-7. Explain why the algorithm is correct.
+6. Explain why each transition is correct and test its edge cases.
+7. Construct the algorithm in dependency order.
 8. Derive its time and auxiliary-space complexity.
 9. Transfer the reasoning to a related problem later.
 
@@ -77,7 +77,7 @@ Pathfinder should teach users how to derive an optimal solution, not merely reco
 - 134 problems imported from the pinned `newfacade/LeetCodeDataset` source.
 - Two curated-only problems, for a merged total of 136 practice problems.
 - Deterministic coaching paths for every loaded problem.
-- Ten questions in a standard path and thirteen in a deep representative path.
+- Nine questions in a standard path and twelve in a deep representative path.
 - Filtering by difficulty, problem set, topic, and algorithm.
 - Static hints and reviewed pattern/problem facts; AI is not required.
 - Plain-language prompts, choices, hints, walkthroughs, and builder steps for every deterministic path.
@@ -109,13 +109,12 @@ The learner selects four phases from a larger bank and places them in dependency
 
 Five reviewed pilot paths replace the conceptual builder with incremental implementation decisions: Two Sum, Longest Substring Without Repeating Characters, Binary Search, Binary Tree Level Order Traversal, and Course Schedule. Correct lines remain visible, wrong lines receive non-revealing feedback, concrete example state is shown after each decision, unfinished work survives refresh, and the canonical implementation appears only after every step. The first three pilots include Python, Java, C++, and Rust; the tree and graph pilots use reviewed Python variants derived from the catalog implementations.
 
-#### Iteration visualization
-
-The fifth question presents a six-frame execution trace after the learner has identified the data structure and invariant. Every frame retains the concrete input and expected output, reports the output at that step, separates processed from remaining work, shows named variables with before/after changes, highlights the active canonical-code lines, and includes an invariant checkpoint before the graded trace question.
+Every reasoning, correctness, edge-case, and trade-off decision precedes construction. Only time- and space-complexity questions follow it.
 
 ### Learning library and reference tools — Complete
 
 - Dedicated lessons for foundational data structures and algorithms.
+- Interactive six-frame execution visualizations in every lesson, using a representative problem and canonical implementation. These are instructional walkthroughs rather than scored questions.
 - Syntax-highlighted examples with language selection where samples are available.
 - Searchable and downloadable algorithm cheat sheet.
 - Problem, lesson, cheat-sheet, and profile routes.
@@ -433,11 +432,11 @@ Example: `V states + E relaxations`, each heap update `log V`, yielding `O((V + 
 
 ## Concrete visualization milestone
 
-The current visualization teaches the conceptual state lifecycle. The next version should add exact, problem-specific state values.
+Visualization now belongs to the Learn curriculum rather than the graded problem path. Every lesson has a representative execution walkthrough using concrete input elements and canonical variable names. Five pilot visualizations have reviewed, exact problem-specific state values; broader exact fixture coverage remains planned.
 
 ### Visualization V2 — Planned
 
-- Author trace fixtures for the thirty deep representative problems first.
+- Author trace fixtures for the remaining twenty-five deep representative problems.
 - Show the exact input cursor, active nodes or edges, pointer positions, queue/stack/heap contents, dynamic-programming cells, and output changes.
 - Highlight only values that changed during the current frame.
 - Provide previous, next, play, pause, restart, and reduced-motion behavior.

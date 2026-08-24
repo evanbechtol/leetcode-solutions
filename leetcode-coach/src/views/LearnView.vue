@@ -2,7 +2,9 @@
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { lessons } from '../data/lessons'
+import { lessonVisualizationFor } from '../data/lessonVisualizations'
 import TreeDiagramNode from '../components/TreeDiagramNode.vue'
+import IterationVisualizationQuestion from '../components/questions/IterationVisualizationQuestion.vue'
 
 const route = useRoute()
 const search = ref('')
@@ -19,6 +21,11 @@ const filteredLessons = computed(() => {
     const searchable = [item.title, item.summary, ...item.signals, ...item.problemTypes, ...item.relatedTopics].join(' ').toLowerCase()
     return matchesCategory && (!query || searchable.includes(query))
   })
+})
+
+const lessonVisualization = computed(() => {
+  if (!lesson.value) return null
+  return lessonVisualizationFor(lesson.value.slug)
 })
 
 function mentalModelParagraphs(model: string | string[]) {
@@ -212,6 +219,20 @@ function mentalModelParagraphs(model: string | string[]) {
                 </div>
               </article>
             </div>
+          </section>
+
+          <section v-if="lessonVisualization" class="lesson-section lesson-execution-section">
+            <div class="section-heading-row"><span>03A</span><div><div class="eyebrow">Interactive execution</div><h2>Watch every value change</h2></div></div>
+            <div class="lesson-execution-intro">
+              <div><span>Representative problem</span><strong>{{ lessonVisualization.problem.title }}</strong></div>
+              <p>Run the canonical algorithm one step at a time. Follow its concrete input elements, data structures, variables, active code, and output.</p>
+            </div>
+            <IterationVisualizationQuestion
+              :key="lessonVisualization.problem.id"
+              :question="lessonVisualization.question"
+              :submitted="false"
+              lesson-mode
+            />
           </section>
 
           <section class="lesson-section">

@@ -15,7 +15,7 @@ describe('progress compatibility', () => {
   })
 
   it('tracks recognition, construction, and visualization separately', () => {
-    expect(QUESTION_FORMATS.map(({ format }) => format)).toEqual(['multiple-choice', 'algorithm-builder', 'iteration-visualization'])
+    expect(QUESTION_FORMATS.map(({ format }) => format)).toEqual(['multiple-choice', 'algorithm-builder', 'code-construction'])
   })
 
   it('migrates both legacy complexity categories without losing the record', () => {
@@ -62,7 +62,7 @@ describe('active problem persistence', () => {
 
   it('restores unfinished algorithm-builder choices', async () => {
     const firstStore = useTrainerStore()
-    firstStore.startProblem(1)
+    firstStore.startProblem(121)
     const builderIndex = firstStore.activeQuestions.findIndex(({ format }) => format === 'algorithm-builder')
     firstStore.currentQuestionIndex = builderIndex
     const chosenIds = firstStore.currentQuestion!.builder!.correctOrder.slice(0, 2)
@@ -71,9 +71,39 @@ describe('active problem persistence', () => {
 
     setActivePinia(createPinia())
     const reloadedStore = useTrainerStore()
-    reloadedStore.startProblem(1)
+    reloadedStore.startProblem(121)
     expect(reloadedStore.currentQuestionIndex).toBe(builderIndex)
     expect(reloadedStore.interactionState).toEqual({ format: 'algorithm-builder', chosenIds })
+  })
+
+  it('restores retained code-construction decisions and the current choice', async () => {
+    const firstStore = useTrainerStore()
+    firstStore.startProblem(1)
+    const constructionIndex = firstStore.activeQuestions.findIndex(({ format }) => format === 'code-construction')
+    firstStore.currentQuestionIndex = constructionIndex
+    const construction = firstStore.currentQuestion!.construction!
+    const completedStepIds = construction.steps.slice(0, 2).map(({ id }) => id)
+    const selectedChoiceId = construction.steps[2].choices[1].id
+    firstStore.setInteractionState({ format: 'code-construction', completedStepIds, selectedChoiceId, lastCheckedChoiceId: selectedChoiceId })
+    await nextTick()
+
+    setActivePinia(createPinia())
+    const reloadedStore = useTrainerStore()
+    reloadedStore.startProblem(1)
+    expect(reloadedStore.currentQuestionIndex).toBe(constructionIndex)
+    expect(reloadedStore.interactionState).toEqual({ format: 'code-construction', completedStepIds, selectedChoiceId, lastCheckedChoiceId: selectedChoiceId })
+  })
+
+  it('clears only the current construction choice on retry', () => {
+    const store = useTrainerStore()
+    store.startProblem(1)
+    const construction = store.activeQuestions.find(({ format }) => format === 'code-construction')!.construction!
+    const completedStepIds = construction.steps.slice(0, 2).map(({ id }) => id)
+    store.setInteractionState({ format: 'code-construction', completedStepIds, selectedChoiceId: 'wrong-line', lastCheckedChoiceId: 'wrong-line' })
+
+    store.tryAgain()
+
+    expect(store.interactionState).toEqual({ format: 'code-construction', completedStepIds, selectedChoiceId: null, lastCheckedChoiceId: null })
   })
 
   it('removes the active session when the problem is cleared', async () => {

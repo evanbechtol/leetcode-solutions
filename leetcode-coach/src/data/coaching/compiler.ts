@@ -1,6 +1,7 @@
 import type {
   AlgorithmBuildStep,
   FormalTerm,
+  HintLevel,
   Problem,
   QuestionStage,
   QuestionType,
@@ -11,6 +12,7 @@ import { beginnerPatternProfiles, type BeginnerPatternProfile } from './beginner
 import { DEEP_PROBLEM_IDS, problemTeachingFacts } from './problemFacts'
 import { patternProfiles, type PatternProfile } from './patterns'
 import { buildExecutionTrace } from './executionTrace'
+import { codeConstructionByProblemId } from './codeConstruction'
 
 interface Choice { text: string; correct: boolean; feedback: string }
 interface Guidance { teachingContext: TeachingContext; formalTerm: FormalTerm }
@@ -51,6 +53,63 @@ const wrongFeedback: Record<QuestionStage, string> = {
   tradeoff: 'This comparison does not describe what this solution gains and pays for. Compare it with the simplest nearby alternative.',
 }
 
+const prerequisitesByStage: Record<QuestionStage, QuestionStage[]> = {
+  contract: [],
+  'data-structure': ['contract'],
+  pattern: ['contract', 'data-structure'],
+  invariant: ['data-structure', 'pattern'],
+  visualization: ['data-structure', 'pattern', 'invariant'],
+  bottleneck: ['data-structure', 'pattern'],
+  'build-algorithm': ['data-structure', 'pattern', 'invariant', 'transition', 'correctness'],
+  transition: ['data-structure', 'pattern', 'invariant'],
+  trace: ['visualization', 'transition'],
+  correctness: ['invariant', 'transition'],
+  'edge-case': ['transition', 'correctness'],
+  'time-complexity': ['transition', 'correctness', 'build-algorithm'],
+  'space-complexity': ['data-structure', 'time-complexity'],
+  tradeoff: ['data-structure', 'pattern', 'correctness'],
+}
+
+const additionalHints: Record<QuestionStage, [string, string]> = {
+  contract: ['Compare the example input with each possible result.', 'Cover the choices and state only what the function must return or change.'],
+  'data-structure': ['List what a later step must recover from earlier work.', 'Process one item mentally, then write down what would be lost unless it were stored.'],
+  pattern: ['Match the stored information to the kind of update or lookup it supports.', 'Take the state from the previous answer and ask how one new input should use it.'],
+  invariant: ['Pause after one update and test which claim remains completely true.', 'Write a sentence beginning “Everything processed so far…” and test it on the example.'],
+  visualization: ['Compare the state immediately before and after the highlighted lines.', 'Run only the first active code line and identify the variable that changes first.'],
+  bottleneck: ['Count which operation the direct solution performs for many different candidates.', 'Circle repeated searches or calculations in a small manual run.'],
+  'build-algorithm': ['Find the step whose required variables already exist.', 'Start with setup, then choose the first step that can legally read that state.'],
+  transition: ['The correct action must change state and move closer to termination.', 'Apply each candidate once to the first example step and reject any that loses earlier work.'],
+  trace: ['Record state after each single update instead of reasoning from memory.', 'Make a two-column table labeled “before” and “after” for the first step.'],
+  correctness: ['Connect the promise maintained during the loop to the state at termination.', 'Assume every earlier step was correct; explain why one more update keeps the result valid.'],
+  'edge-case': ['Look for the smallest input or the point where a boundary becomes empty.', 'Run the setup and first update on an empty, one-item, or duplicate-heavy case.'],
+  'time-complexity': ['Count visits to each item and then include any nonconstant data-structure operation.', 'Write the cost of one update and multiply it by the maximum number of updates.'],
+  'space-complexity': ['Find the largest extra structure that can exist at one time.', 'Mark every map, stack, queue, table, and active call, then ignore the required output.'],
+  tradeoff: ['Compare time, extra memory, input mutation, and implementation complexity.', 'Name one resource this approach saves and one requirement or cost it adds.'],
+}
+
+const readingLevelNotes: Record<QuestionStage, string[]> = {
+  contract: ['Uses “required result” before introducing the formal term “problem contract”.'],
+  'data-structure': ['Allows scalar variables as maintained state; does not imply that every solution needs a collection.'],
+  pattern: ['The algorithm name is withheld until correct feedback.'],
+  invariant: ['Uses “promise” before defining “invariant”.'],
+  visualization: ['State changes are observable before the term “iteration” is defined.'],
+  bottleneck: ['Describes repeated work before introducing asymptotic analysis.'],
+  'build-algorithm': ['Uses dependency order without assuming control-flow vocabulary.'],
+  transition: ['Uses “one safe step” before defining “state transition”.'],
+  trace: ['Defines dry run only after the learner follows a concrete example.'],
+  correctness: ['Requests a plain-language reason before defining a correctness argument.'],
+  'edge-case': ['Provides boundary examples without assuming prior testing terminology.'],
+  'time-complexity': ['The teaching context defines growth before formal Big-O reasoning.'],
+  'space-complexity': ['Distinguishes extra memory from input and output before defining auxiliary space.'],
+  tradeoff: ['Names concrete resources before introducing the formal term “trade-off”.'],
+}
+
+const buildHintLevels = (stage: QuestionStage, firstHint: string): HintLevel[] => [
+  { id: 'cue', label: 'Look here', text: firstHint },
+  { id: 'concept', label: 'What to track', text: additionalHints[stage][0] },
+  { id: 'worked-step', label: 'Try one step', text: additionalHints[stage][1] },
+]
+
 const question = (
   problem: Problem,
   stage: QuestionStage,
@@ -77,6 +136,9 @@ const question = (
     answer: choices.findIndex(({ correct }) => correct),
     explanation,
     hint,
+    hintLevels: buildHintLevels(stage, hint),
+    prerequisites: prerequisitesByStage[stage],
+    readingLevelNotes: readingLevelNotes[stage],
     ...learnerGuidance,
     optionFeedback: choices.map(({ feedback }) => feedback),
   }
@@ -115,6 +177,15 @@ const visualizationQuestion = (
   }
 }
 
+export const compileLessonVisualization = (problem: Problem): QuizQuestion => {
+  const fact = problemTeachingFacts[problem.id]
+  if (!fact) throw new Error(`Missing verified teaching fact for problem ${problem.id}`)
+  const profile = { ...patternProfiles[fact.pattern], ...fact.teaching }
+  const beginner = { ...beginnerPatternProfiles[fact.pattern], ...fact.beginner }
+  const example = problem.examples[0]
+  return visualizationQuestion(problem, profile, beginner, example?.input ?? 'the provided input', example?.output ?? 'the required output')
+}
+
 const algorithmBuilderQuestion = (problem: Problem, profile: PatternProfile, beginner: BeginnerPatternProfile): QuizQuestion => {
   const correctSteps: AlgorithmBuildStep[] = [
     { id: 'initialize', text: `Set up: ${beginner.memory}`, reason: 'The solution needs this information before it can process anything.' },
@@ -137,6 +208,9 @@ const algorithmBuilderQuestion = (problem: Problem, profile: PatternProfile, beg
     answer: 0,
     explanation: 'First create the needed information. Then repeat the safe update while work remains. Finally, use the completed state as the answer.',
     hint: 'Start with the information the first real step needs. Finish only after every required piece of work is handled.',
+    hintLevels: buildHintLevels('build-algorithm', 'Start with the information the first real step needs.'),
+    prerequisites: prerequisitesByStage['build-algorithm'],
+    readingLevelNotes: readingLevelNotes['build-algorithm'],
     ...guidance('Build before seeing code', 'A complete algorithm needs a setup, a stopping rule, a repeated action, and a way to produce the answer.', 'Algorithm structure', 'The ordered parts that initialize, repeat, and finish a solution.'),
     optionFeedback: steps.map(({ id }) => id.startsWith('decoy')
       ? 'This step belongs to a different strategy. Use the information and action established for this problem.'
@@ -144,6 +218,23 @@ const algorithmBuilderQuestion = (problem: Problem, profile: PatternProfile, beg
     builder: { steps, correctOrder: correctSteps.map(({ id }) => id) },
   }
 }
+
+const codeConstructionQuestion = (problem: Problem, profile: PatternProfile): QuizQuestion => ({
+  id: `${problem.id}:static-v4:code-construction`,
+  type: 'Algorithm',
+  format: 'code-construction',
+  stage: 'build-algorithm',
+  prompt: `Construct the optimal ${profile.title.toLocaleLowerCase()} implementation one decision at a time.`,
+  options: [],
+  answer: 0,
+  explanation: 'Each selected line preserves the required state, makes progress, and assembles the reviewed canonical implementation.',
+  hint: 'Use the state established by earlier decisions. Choose the next line that reads only available information and preserves the invariant.',
+  hintLevels: buildHintLevels('build-algorithm', 'Use the state established by earlier decisions.'),
+  prerequisites: prerequisitesByStage['build-algorithm'],
+  readingLevelNotes: ['Introduces one implementation decision at a time and explains its state effect before showing the complete implementation.'],
+  ...guidance('Build the implementation', 'Choose one line or block at a time. Correct code stays in place so each new decision can build on it.', 'Code construction', 'The process of translating an algorithm into ordered, executable statements.'),
+  construction: codeConstructionByProblemId[problem.id],
+})
 
 const complexityDistractors = (correct: string, kind: 'time' | 'space') => {
   const candidates = kind === 'time'
@@ -209,7 +300,9 @@ export const compileQuestionPath = (problem: Problem, allProblems: Problem[]): Q
       'Find the search, comparison, or calculation a basic solution performs again and again.',
       guidance('Find the repeated work', 'Faster solutions often store or reuse a result instead of calculating the same thing again.', 'Bottleneck', 'The part of a solution that contributes most to its running time or memory use.'),
     ),
-    'build-algorithm': algorithmBuilderQuestion(problem, profile, beginner),
+    'build-algorithm': codeConstructionByProblemId[problem.id]
+      ? codeConstructionQuestion(problem, profile)
+      : algorithmBuilderQuestion(problem, profile, beginner),
     transition: question(
       problem, 'transition', 'Algorithm',
       'What should the solution do with one new piece of work?',
@@ -262,7 +355,7 @@ export const compileQuestionPath = (problem: Problem, allProblems: Problem[]): Q
     ),
   }
 
-  const baseline: QuestionStage[] = ['contract', 'data-structure', 'pattern', 'invariant', 'visualization', 'build-algorithm', 'transition', 'correctness', 'time-complexity', 'space-complexity']
-  const deep: QuestionStage[] = ['contract', 'data-structure', 'pattern', 'invariant', 'visualization', 'bottleneck', 'build-algorithm', 'transition', 'correctness', 'edge-case', 'time-complexity', 'space-complexity', 'tradeoff']
+  const baseline: QuestionStage[] = ['contract', 'data-structure', 'pattern', 'invariant', 'transition', 'correctness', 'build-algorithm', 'time-complexity', 'space-complexity']
+  const deep: QuestionStage[] = ['contract', 'data-structure', 'pattern', 'invariant', 'bottleneck', 'transition', 'correctness', 'edge-case', 'tradeoff', 'build-algorithm', 'time-complexity', 'space-complexity']
   return (DEEP_PROBLEM_IDS.has(problem.id) ? deep : baseline).map((stage) => stages[stage])
 }

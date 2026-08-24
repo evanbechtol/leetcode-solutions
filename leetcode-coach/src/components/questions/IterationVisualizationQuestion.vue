@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { QuestionInteractionState, QuizQuestion } from '../../types'
 import { evaluateSelectedOption } from '../../utils/questionEvaluation'
 
-const props = defineProps<{ question: QuizQuestion; submitted: boolean; initialState?: QuestionInteractionState | null }>()
+const props = defineProps<{ question: QuizQuestion; submitted: boolean; initialState?: QuestionInteractionState | null; lessonMode?: boolean }>()
 const emit = defineEmits<{
   (event: 'response-change', response: { ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState }): void
 }>()
@@ -18,6 +18,9 @@ const codeLines = computed(() => config.value.code.split('\n'))
 const finalFrame = computed(() => frameIndex.value === config.value.frames.length - 1)
 const evaluation = computed(() => evaluateSelectedOption(props.question.answer, selectedAnswer.value))
 const isCorrect = computed(() => evaluation.value.correct)
+const variableGroups = computed(() => (['input', 'control', 'state', 'output'] as const)
+  .map((role) => ({ role, variables: frame.value.variables.filter((item) => item.role === role) }))
+  .filter(({ variables }) => variables.length))
 
 function goTo(index: number) {
   if (index < 0 || index >= config.value.frames.length || index > furthestFrame.value + 1) return
@@ -73,25 +76,51 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
 
     <section class="visualizer-frame" aria-live="polite">
       <header><span>{{ frame.phase }}</span><h3>{{ frame.title }}</h3></header>
-      <div class="visualizer-action"><v-icon icon="mdi-play-circle-outline" /><p>{{ frame.action }}</p></div>
-
-      <div class="visualizer-progress-state">
-        <div><span>Processed</span><strong>{{ frame.processed }}</strong></div>
-        <div><span>Remaining</span><strong>{{ frame.remaining }}</strong></div>
+      <div class="visualizer-execution-summary">
+        <div class="visualizer-action"><v-icon icon="mdi-play-circle-outline" /><p>{{ frame.action }}</p></div>
+        <div class="visualizer-progress-state">
+          <div><span>Processed</span><strong>{{ frame.processed }}</strong></div>
+          <v-icon icon="mdi-arrow-right" size="17" />
+          <div><span>Remaining</span><strong>{{ frame.remaining }}</strong></div>
+        </div>
       </div>
 
       <div class="visualizer-section-heading">
-        <div><span>State snapshot</span><strong>Variables after this step</strong></div>
-        <small><i /> changed value</small>
+        <div><span>Live execution state</span><strong>Every value after this step</strong></div>
+        <small><i /> changed or active</small>
       </div>
-      <div class="visualizer-variables" role="table" aria-label="Algorithm variable state">
-        <div v-for="variable in frame.variables" :key="variable.name" class="visualizer-variable" :class="[`role-${variable.role}`, { changed: variable.changed }]" role="row">
-          <div class="variable-name" role="cell"><code>{{ variable.name }}</code><span>{{ variable.role }}</span></div>
-          <div class="variable-value" role="cell">
-            <small v-if="variable.previousValue">{{ variable.previousValue }}<v-icon icon="mdi-arrow-right" size="13" /></small>
-            <strong>{{ variable.value }}</strong>
+
+      <div class="visualizer-workspace">
+        <section v-if="frame.structures?.length" class="visualizer-structures" aria-label="Data structure state">
+          <header><v-icon icon="mdi-view-grid-outline" /><div><span>Data structures</span><strong>Elements, indices, and contents</strong></div></header>
+          <article v-for="dataStructure in frame.structures" :key="dataStructure.name" class="visualizer-structure" :class="`structure-${dataStructure.kind}`">
+            <div class="structure-heading"><div><code>{{ dataStructure.name }}</code><span>{{ dataStructure.kind }}</span></div><p>{{ dataStructure.description }}</p></div>
+            <div v-if="dataStructure.items.length" class="structure-items">
+              <div v-for="item in dataStructure.items" :key="`${item.key}-${item.value}`" class="structure-item" :class="item.status ? `status-${item.status}` : ''">
+                <span>{{ item.key }}</span>
+                <strong>{{ item.value }}</strong>
+                <small v-if="item.status">{{ item.status }}</small>
+              </div>
+            </div>
+            <div v-else class="structure-empty">Empty</div>
+          </article>
+        </section>
+
+        <section class="visualizer-variable-panel" aria-label="Algorithm variable state">
+          <header><v-icon icon="mdi-variable" /><div><span>Variables</span><strong>Named values in memory</strong></div></header>
+          <div v-for="group in variableGroups" :key="group.role" class="variable-group">
+            <div class="variable-group-label">{{ group.role }}</div>
+            <div class="variable-grid">
+              <article v-for="variable in group.variables" :key="variable.name" class="visualizer-variable" :class="[`role-${variable.role}`, { changed: variable.changed }]">
+                <div class="variable-name"><code>{{ variable.name }}</code><span>{{ variable.role }}</span></div>
+                <div class="variable-value">
+                  <small v-if="variable.previousValue"><s>{{ variable.previousValue }}</s><v-icon icon="mdi-arrow-right" size="13" /></small>
+                  <strong>{{ variable.value }}</strong>
+                </div>
+              </article>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
 
       <div class="visualizer-code">
@@ -106,12 +135,12 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
       <div class="visualizer-invariant"><v-icon icon="mdi-shield-check-outline" /><div><span>Invariant checkpoint</span><p>{{ frame.invariant }}</p></div></div>
     </section>
 
-    <div v-if="!finalFrame" class="visualizer-nav">
+    <div v-if="!finalFrame || lessonMode" class="visualizer-nav">
       <v-btn variant="text" :disabled="frameIndex === 0" prepend-icon="mdi-arrow-left" @click="goTo(frameIndex - 1)">Previous</v-btn>
-      <v-btn color="primary" append-icon="mdi-arrow-right" @click="nextFrame">Run next step</v-btn>
+      <v-btn v-if="!finalFrame" color="primary" append-icon="mdi-arrow-right" @click="nextFrame">Run next step</v-btn>
     </div>
 
-    <div v-else class="visualizer-checkpoint">
+    <div v-else-if="!lessonMode" class="visualizer-checkpoint">
       <div class="box-label">Trace checkpoint</div>
       <div class="answer-list" role="radiogroup" :aria-label="question.prompt">
         <button

@@ -1,5 +1,6 @@
 import type { Problem, VisualizationFrame } from '../../types'
 import type { BeginnerPatternProfile } from './beginnerProfiles'
+import { buildExactExecutionTrace } from './exactExecutionTraces'
 
 interface InputVariable { name: string; value: string }
 
@@ -65,15 +66,80 @@ const inputState = (variables: InputVariable[]) => variables.map(({ name, value 
   role: 'input' as const,
 }))
 
+const inputStructures = (variables: InputVariable[]): NonNullable<VisualizationFrame['structures']> => variables.flatMap(({ name, value }) => {
+  const trimmed = value.trim()
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    const members = splitTopLevel(trimmed.slice(1, -1))
+    return [{
+      name,
+      kind: 'array' as const,
+      description: 'Concrete input elements by index',
+      items: members.map((member, index) => ({ key: String(index), value: member })),
+    }]
+  }
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return [{
+      name,
+      kind: 'string' as const,
+      description: 'Concrete input characters by index',
+      items: [...trimmed.slice(1, -1)].map((character, index) => ({ key: String(index), value: character === ' ' ? 'space' : character })),
+    }]
+  }
+  return []
+})
+
+interface SourceSymbol { name: string; initializer: string; role: 'control' | 'state' }
+
+const sourceSymbols = (code: string, inputNames: Set<string>): SourceSymbol[] => {
+  const found: SourceSymbol[] = []
+  const add = (name: string, initializer: string, line: string) => {
+    if (!name || inputNames.has(name) || found.some((item) => item.name === name)) return
+    const role = /\b(for|while)\b/.test(line) || /^(i|j|k|left|right|mid|index|start|end|node|current|row|col)$/.test(name) ? 'control' : 'state'
+    found.push({ name, initializer: initializer.trim() || 'Declared by the canonical code', role })
+  }
+  for (const line of code.split('\n')) {
+    const javascript = line.match(/\b(?:const|let|var)\s+(.+)$/)
+    if (javascript) {
+      for (const declaration of splitTopLevel(javascript[1])) {
+        const match = declaration.match(/^([A-Za-z_$][\w$]*)\s*=\s*(.+?);?$/)
+        if (match) add(match[1], match[2], line)
+      }
+    }
+    const python = line.match(/^\s*([A-Za-z_]\w*)\s*=\s*(?!=)(.+)$/)
+    if (python) add(python[1], python[2], line)
+    const javascriptLoop = line.match(/\bfor\s*\(\s*(?:let|const|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;]+)/)
+    if (javascriptLoop) add(javascriptLoop[1], javascriptLoop[2], line)
+    const pythonLoop = line.match(/^\s*for\s+([A-Za-z_]\w*)\s+in\s+(.+):/)
+    if (pythonLoop) add(pythonLoop[1], pythonLoop[2], line)
+  }
+  return found.slice(0, 8)
+}
+
+const sourceVariableState = (
+  symbols: SourceSymbol[], code: string, activeCodeLines: number[], phase: 'input' | 'initialize' | 'execute' | 'finish',
+) => {
+  const lines = code.split('\n')
+  return symbols.map(({ name, initializer, role }) => {
+    const pattern = new RegExp(`\\b${name.replace(/[$]/g, '\\$&')}\\b`)
+    const activeLine = activeCodeLines.map((index) => lines[index]?.trim()).find((line) => line && pattern.test(line))
+    const value = phase === 'input' ? 'Not initialized' : phase === 'finish' ? (activeLine || `Final ${name}`) : (activeLine || initializer)
+    return { name, value, previousValue: phase === 'initialize' ? 'Not initialized' : undefined, changed: phase !== 'input' && Boolean(activeLine || phase === 'initialize'), role }
+  })
+}
+
 export const buildExecutionTrace = (
   problem: Problem,
   beginner: BeginnerPatternProfile,
   input: string,
   expectedOutput: string,
 ): VisualizationFrame[] => {
+  const exactTrace = buildExactExecutionTrace(problem)
+  if (exactTrace) return exactTrace
   const inputs = inputVariables(input)
   const exactInputs = inputState(inputs)
+  const exactStructures = inputStructures(inputs)
   const lines = codeLineGroups(problem.solution)
+  const symbols = sourceSymbols(problem.solution, new Set([...inputs.map(({ name }) => name), 'output']))
   const primaryInput = inputs[0]?.name ?? 'input'
   const pendingOutput = 'Not produced yet'
 
@@ -85,10 +151,10 @@ export const buildExecutionTrace = (
       processed: 'Nothing', remaining: 'The entire example', activeCodeLines: lines.start,
       variables: [
         ...exactInputs,
-        { name: 'iteration', value: 'Not started', role: 'control' },
-        { name: 'algorithmState', value: 'Not initialized', role: 'state' },
+        ...sourceVariableState(symbols, problem.solution, lines.start, 'input'),
         { name: 'output', value: pendingOutput, role: 'output' },
       ],
+      structures: exactStructures,
       invariant: 'No input has been processed, so the algorithm has not made any claims yet.',
     },
     {
@@ -98,11 +164,10 @@ export const buildExecutionTrace = (
       processed: 'Nothing', remaining: 'The entire example', activeCodeLines: lines.setup,
       variables: [
         ...exactInputs,
-        { name: 'iteration', value: '0', previousValue: 'Not started', changed: true, role: 'control' },
-        { name: 'algorithmState', value: beginner.memory, previousValue: 'Not initialized', changed: true, role: 'state' },
-        { name: 'processedWork', value: 'None', role: 'state' },
+        ...sourceVariableState(symbols, problem.solution, lines.setup, 'initialize'),
         { name: 'output', value: pendingOutput, role: 'output' },
       ],
+      structures: exactStructures,
       invariant: 'The initialized state correctly represents an empty processed region.',
     },
     {
@@ -112,13 +177,10 @@ export const buildExecutionTrace = (
       processed: 'Nothing', remaining: `All work represented by ${primaryInput}`, activeCodeLines: lines.control,
       variables: [
         ...exactInputs,
-        { name: 'iteration', value: '1 — before update', previousValue: '0', changed: true, role: 'control' },
-        { name: 'currentWork', value: `First eligible unit from ${primaryInput}`, changed: true, role: 'control' },
-        { name: 'processedWork', value: 'None', role: 'state' },
-        { name: 'remainingWork', value: `All work represented by ${primaryInput}`, role: 'state' },
-        { name: 'algorithmState', value: beginner.memory, role: 'state' },
+        ...sourceVariableState(symbols, problem.solution, lines.control, 'execute'),
         { name: 'output', value: pendingOutput, role: 'output' },
       ],
+      structures: exactStructures,
       invariant: beginner.promise,
     },
     {
@@ -128,13 +190,10 @@ export const buildExecutionTrace = (
       processed: 'The first eligible unit', remaining: `Every later unit represented by ${primaryInput}`, activeCodeLines: lines.update,
       variables: [
         ...exactInputs,
-        { name: 'iteration', value: '1 — complete', previousValue: '1 — before update', changed: true, role: 'control' },
-        { name: 'currentWork', value: 'First eligible unit — handled', previousValue: `First eligible unit from ${primaryInput}`, changed: true, role: 'control' },
-        { name: 'processedWork', value: 'First eligible unit', previousValue: 'None', changed: true, role: 'state' },
-        { name: 'remainingWork', value: `Every later unit represented by ${primaryInput}`, previousValue: `All work represented by ${primaryInput}`, changed: true, role: 'state' },
-        { name: 'algorithmState', value: `Updated once using: ${beginner.step}`, previousValue: beginner.memory, changed: true, role: 'state' },
+        ...sourceVariableState(symbols, problem.solution, lines.update, 'execute'),
         { name: 'output', value: 'Pending or returned if the stopping condition is met', previousValue: pendingOutput, changed: true, role: 'output' },
       ],
+      structures: exactStructures,
       invariant: beginner.promise,
     },
     {
@@ -144,13 +203,10 @@ export const buildExecutionTrace = (
       processed: 'Every unit handled so far', remaining: 'Only work not yet reached by the control rule', activeCodeLines: [...new Set([...lines.control, ...lines.update])],
       variables: [
         ...exactInputs,
-        { name: 'iteration', value: '2…n, until the stopping condition', previousValue: '1 — complete', changed: true, role: 'control' },
-        { name: 'currentWork', value: 'The next eligible item, node, edge, range, or state', previousValue: 'First eligible unit — handled', changed: true, role: 'control' },
-        { name: 'processedWork', value: 'Every unit completed before the current step', previousValue: 'First eligible unit', changed: true, role: 'state' },
-        { name: 'remainingWork', value: 'Only units not reached yet', previousValue: `Every later unit represented by ${primaryInput}`, changed: true, role: 'state' },
-        { name: 'algorithmState', value: `Current result after repeatedly applying: ${beginner.step}`, previousValue: `Updated once using: ${beginner.step}`, changed: true, role: 'state' },
+        ...sourceVariableState(symbols, problem.solution, [...new Set([...lines.control, ...lines.update])], 'execute'),
         { name: 'output', value: 'Best or completed result known so far', previousValue: 'Pending or returned if the stopping condition is met', changed: true, role: 'output' },
       ],
+      structures: exactStructures,
       invariant: beginner.promise,
     },
     {
@@ -160,13 +216,10 @@ export const buildExecutionTrace = (
       processed: 'All required work', remaining: 'Nothing', activeCodeLines: lines.finish,
       variables: [
         ...exactInputs,
-        { name: 'iteration', value: 'Complete', previousValue: '2…n, until the stopping condition', changed: true, role: 'control' },
-        { name: 'currentWork', value: 'None', previousValue: 'The next eligible item, node, edge, range, or state', changed: true, role: 'control' },
-        { name: 'processedWork', value: 'All required work', previousValue: 'Every unit completed before the current step', changed: true, role: 'state' },
-        { name: 'remainingWork', value: 'Nothing', previousValue: 'Only units not reached yet', changed: true, role: 'state' },
-        { name: 'algorithmState', value: 'Final state satisfies the required result', previousValue: `Current result after repeatedly applying: ${beginner.step}`, changed: true, role: 'state' },
+        ...sourceVariableState(symbols, problem.solution, lines.finish, 'finish'),
         { name: 'output', value: expectedOutput, previousValue: 'Best or completed result known so far', changed: true, role: 'output' },
       ],
+      structures: exactStructures,
       invariant: 'All required work is complete, so the final state gives the requested output.',
     },
   ]

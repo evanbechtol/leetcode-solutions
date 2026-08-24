@@ -13,7 +13,7 @@ export const QUESTION_TYPES: QuestionType[] = ['Comprehension', 'Pattern', 'Data
 export const QUESTION_FORMATS: Array<{ format: QuestionFormat; label: string }> = [
   { format: 'multiple-choice', label: 'Decision questions' },
   { format: 'algorithm-builder', label: 'Build the algorithm' },
-  { format: 'iteration-visualization', label: 'Iteration walkthroughs' },
+  { format: 'code-construction', label: 'Construct the code' },
 ]
 
 interface PersistedProgress {
@@ -56,6 +56,7 @@ export const useTrainerStore = defineStore('trainer', () => {
   const submitted = ref(false)
   const answerCorrect = ref<boolean | null>(null)
   const firstTryCorrect = ref(0)
+  const revealedHintCount = ref(0)
   const attemptedCurrent = ref(new Set<string>())
   const interactionState = ref<QuestionInteractionState | null>(null)
   const problemComplete = ref(false)
@@ -116,6 +117,7 @@ export const useTrainerStore = defineStore('trainer', () => {
     submitted,
     answerCorrect,
     firstTryCorrect,
+    revealedHintCount,
     attemptedCurrent,
     interactionState,
     problemComplete,
@@ -131,6 +133,7 @@ export const useTrainerStore = defineStore('trainer', () => {
       submitted: submitted.value,
       answerCorrect: answerCorrect.value,
       firstTryCorrect: firstTryCorrect.value,
+      revealedHintCount: revealedHintCount.value,
       attemptedQuestionIds: [...attemptedCurrent.value],
       interactionState: interactionState.value,
       completed: problemComplete.value,
@@ -143,6 +146,7 @@ export const useTrainerStore = defineStore('trainer', () => {
     submitted.value = false
     answerCorrect.value = null
     firstTryCorrect.value = 0
+    revealedHintCount.value = 0
     attemptedCurrent.value = new Set()
     interactionState.value = null
     problemComplete.value = false
@@ -165,6 +169,7 @@ export const useTrainerStore = defineStore('trainer', () => {
       submitted.value = restored.submitted
       answerCorrect.value = restored.answerCorrect
       firstTryCorrect.value = restored.firstTryCorrect
+      revealedHintCount.value = restored.revealedHintCount
       attemptedCurrent.value = new Set(restored.attemptedQuestionIds)
       interactionState.value = restored.interactionState
       problemComplete.value = restored.completed
@@ -250,11 +255,18 @@ export const useTrainerStore = defineStore('trainer', () => {
     selectedAnswer.value = null
     submitted.value = false
     answerCorrect.value = null
-    interactionState.value = null
+    interactionState.value = interactionState.value?.format === 'code-construction'
+      ? { ...interactionState.value, selectedChoiceId: null, lastCheckedChoiceId: null }
+      : null
   }
 
   function setInteractionState(state: QuestionInteractionState | null) {
     interactionState.value = state
+  }
+
+  function revealNextHint() {
+    const maximum = currentQuestion.value?.hintLevels?.length ?? 0
+    revealedHintCount.value = Math.min(revealedHintCount.value + 1, maximum)
   }
 
   function nextQuestion() {
@@ -264,6 +276,7 @@ export const useTrainerStore = defineStore('trainer', () => {
       selectedAnswer.value = null
       submitted.value = false
       answerCorrect.value = null
+      revealedHintCount.value = 0
       interactionState.value = null
       return true
     }
@@ -285,8 +298,8 @@ export const useTrainerStore = defineStore('trainer', () => {
 
   return {
     answers, results, streak, bestStreak, currentProblemId, currentQuestionIndex, selectedAnswer, submitted, answerCorrect,
-    firstTryCorrect, interactionState, problemComplete, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
+    firstTryCorrect, revealedHintCount, interactionState, problemComplete, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
     totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, topicMastery, aiCoachEnabled, catalogSize: problems.length, startProblem,
-    pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, tryAgain, setInteractionState, nextQuestion, resetProgress,
+    pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, tryAgain, setInteractionState, revealNextHint, nextQuestion, resetProgress,
   }
 })

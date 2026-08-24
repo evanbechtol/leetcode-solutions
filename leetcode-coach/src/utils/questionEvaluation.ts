@@ -1,4 +1,4 @@
-import type { AlgorithmBuilderConfig } from '../types'
+import type { AlgorithmBuilderConfig, CodeConstructionStep } from '../types'
 
 export const evaluateAlgorithmOrder = (config: AlgorithmBuilderConfig, chosenIds: string[]) => {
   const firstMismatch = chosenIds.findIndex((id, index) => id !== config.correctOrder[index])
@@ -14,3 +14,12 @@ export const evaluateSelectedOption = (answer: number, selectedAnswer: number | 
   ready: selectedAnswer !== null,
   correct: selectedAnswer !== null && selectedAnswer === answer,
 })
+
+export const evaluateCodeConstructionChoice = (step: CodeConstructionStep, selectedChoiceId: string | null) => {
+  const choice = step.choices.find(({ id }) => id === selectedChoiceId)
+  return {
+    ready: Boolean(choice),
+    correct: choice?.id === step.correctChoiceId,
+    feedback: choice?.feedback ?? '',
+  }
+}

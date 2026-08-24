@@ -11,6 +11,7 @@ export interface ActiveProblemSession {
   submitted: boolean
   answerCorrect: boolean | null
   firstTryCorrect: number
+  revealedHintCount: number
   attemptedQuestionIds: string[]
   interactionState: QuestionInteractionState | null
   completed: boolean
@@ -46,6 +47,24 @@ const validInteractionState = (value: unknown, question: QuizQuestion): Question
     }
   }
 
+  if (question.format === 'code-construction' && state.format === 'code-construction') {
+    const candidate = state as { completedStepIds?: unknown; selectedChoiceId?: unknown; lastCheckedChoiceId?: unknown }
+    const steps = question.construction?.steps ?? []
+    if (!Array.isArray(candidate.completedStepIds) || candidate.completedStepIds.some((id) => typeof id !== 'string')) return null
+    const completedStepIds = candidate.completedStepIds as string[]
+    if (completedStepIds.length > steps.length || completedStepIds.some((id, index) => id !== steps[index]?.id)) return null
+    const currentStep = steps[completedStepIds.length]
+    const validChoiceIds = new Set(currentStep?.choices.map(({ id }) => id) ?? [])
+    const validChoice = (id: unknown) => id === null || (typeof id === 'string' && validChoiceIds.has(id))
+    if (!validChoice(candidate.selectedChoiceId) || !validChoice(candidate.lastCheckedChoiceId)) return null
+    return {
+      format: 'code-construction',
+      completedStepIds: [...completedStepIds],
+      selectedChoiceId: candidate.selectedChoiceId as string | null,
+      lastCheckedChoiceId: candidate.lastCheckedChoiceId as string | null,
+    }
+  }
+
   return null
 }
 
@@ -66,6 +85,7 @@ export const parseActiveProblemSession = (
     if (typeof value.submitted !== 'boolean' || (value.answerCorrect !== null && typeof value.answerCorrect !== 'boolean')) return null
     if (value.submitted !== (typeof value.answerCorrect === 'boolean')) return null
     if (!isIntegerInRange(value.firstTryCorrect, 0, questions.length)) return null
+    if (!isIntegerInRange(value.revealedHintCount, 0, question.hintLevels?.length ?? 0)) return null
     if (!Array.isArray(value.attemptedQuestionIds) || value.attemptedQuestionIds.some((id) => typeof id !== 'string')) return null
     if (typeof value.completed !== 'boolean' || (value.completed && questionIndex !== questions.length - 1)) return null
 
@@ -78,6 +98,7 @@ export const parseActiveProblemSession = (
       submitted: value.submitted,
       answerCorrect: value.answerCorrect,
       firstTryCorrect: Number(value.firstTryCorrect),
+      revealedHintCount: Number(value.revealedHintCount),
       attemptedQuestionIds: [...new Set(value.attemptedQuestionIds)],
       interactionState: validInteractionState(value.interactionState, question),
       completed: value.completed,

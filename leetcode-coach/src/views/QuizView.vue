@@ -12,7 +12,7 @@ import { useTrainerStore } from '../stores/trainer'
 import { useCodeLanguagePreference } from '../composables/useCodeLanguagePreference'
 import FilterPanel from '../components/FilterPanel.vue'
 import AlgorithmBuilderQuestion from '../components/questions/AlgorithmBuilderQuestion.vue'
-import IterationVisualizationQuestion from '../components/questions/IterationVisualizationQuestion.vue'
+import CodeConstructionQuestion from '../components/questions/CodeConstructionQuestion.vue'
 import { incorrectFeedbackFor, shouldRevealCorrectChoice } from '../utils/quizFeedback'
 import { parseProblemRouteId, problemRoutePath } from '../utils/problemRoutes'
 import type { QuestionInteractionState } from '../types'
@@ -58,14 +58,18 @@ const isMultipleChoice = computed(() => currentFormat.value === 'multiple-choice
 const isCorrect = computed(() => store.submitted && store.answerCorrect === true)
 const revealCorrectChoice = computed(() => shouldRevealCorrectChoice(store.submitted, isCorrect.value))
 const canSubmit = computed(() => isMultipleChoice.value ? store.selectedAnswer !== null : interactionResponse.value.ready)
+const revealedHints = computed(() => store.currentQuestion?.hintLevels?.slice(0, store.revealedHintCount) ?? [])
+const hasMoreHints = computed(() => store.revealedHintCount < (store.currentQuestion?.hintLevels?.length ?? 0))
 const actionInstruction = computed(() => ({
   'multiple-choice': 'Select the strongest answer',
   'algorithm-builder': 'Place all four steps in order',
+  'code-construction': 'Complete each implementation decision',
   'iteration-visualization': 'Run every frame, then answer the checkpoint',
 }[currentFormat.value]))
 const checkLabel = computed(() => ({
   'multiple-choice': 'Check reasoning',
   'algorithm-builder': 'Check sequence',
+  'code-construction': 'Finish constructing the code',
   'iteration-visualization': 'Check trace',
 }[currentFormat.value]))
 const codeSamples = computed<Record<string, string>>(() => {
@@ -316,9 +320,9 @@ async function copySolution() {
           </div>
           <v-card class="question-card pa-6 pa-md-9">
             <div class="question-type">
-              <v-icon :icon="currentFormat === 'algorithm-builder' ? 'mdi-code-braces' : currentFormat === 'iteration-visualization' ? 'mdi-motion-play-outline' : 'mdi-lightbulb-on-outline'" size="18" />
+              <v-icon :icon="['algorithm-builder', 'code-construction'].includes(currentFormat) ? 'mdi-code-braces' : currentFormat === 'iteration-visualization' ? 'mdi-motion-play-outline' : 'mdi-lightbulb-on-outline'" size="18" />
               {{ store.currentQuestion?.type }}
-              <span v-if="currentFormat !== 'multiple-choice'">· {{ currentFormat === 'algorithm-builder' ? 'Build' : 'Visualize' }}</span>
+              <span v-if="currentFormat !== 'multiple-choice'">· {{ currentFormat === 'algorithm-builder' ? 'Build' : currentFormat === 'code-construction' ? 'Construct' : 'Visualize' }}</span>
             </div>
             <div v-if="store.currentQuestion?.teachingContext" class="teaching-context mt-5">
               <span>Before you answer</span>
@@ -334,8 +338,8 @@ async function copySolution() {
               :initial-state="store.interactionState"
               @response-change="updateInteraction"
             />
-            <IterationVisualizationQuestion
-              v-else-if="currentFormat === 'iteration-visualization' && store.currentQuestion"
+            <CodeConstructionQuestion
+              v-else-if="currentFormat === 'code-construction' && store.currentQuestion"
               :key="interactionKey"
               :question="store.currentQuestion"
               :submitted="store.submitted"
@@ -368,8 +372,17 @@ async function copySolution() {
               <div v-if="store.submitted" class="feedback mt-6" :class="isCorrect ? 'feedback-correct' : 'feedback-wrong'">
                 <div class="feedback-heading"><v-icon :icon="isCorrect ? 'mdi-check-decagram' : 'mdi-sign-direction'" /> {{ isCorrect ? 'That’s the move.' : 'Take another look.' }}</div>
                 <p v-if="!isCorrect && hintLoading" class="hint-loading"><v-progress-circular indeterminate size="16" width="2" /> Your coach is shaping a hint around that choice…</p>
-                <p v-else>{{ isCorrect ? store.currentQuestion?.explanation : (aiHint || store.currentQuestion?.hint) }}</p>
-                <div v-if="!isCorrect" class="why-note"><strong>Leading hint:</strong> {{ store.currentQuestion?.hint }}</div>
+                <p v-else>{{ isCorrect ? store.currentQuestion?.explanation : (aiHint || 'That choice does not fit the state established by the earlier steps.') }}</p>
+                <div v-if="!isCorrect" class="hint-ladder mt-4">
+                  <div v-for="(hint, index) in revealedHints" :key="hint.id" class="revealed-hint">
+                    <span>Hint {{ index + 1 }} · {{ hint.label }}</span>
+                    <p>{{ hint.text }}</p>
+                  </div>
+                  <v-btn v-if="hasMoreHints" size="small" variant="outlined" prepend-icon="mdi-lightbulb-outline" @click="store.revealNextHint">
+                    {{ revealedHints.length ? 'Reveal next hint' : 'Show a hint' }}
+                  </v-btn>
+                  <small v-else-if="revealedHints.length">All available hints revealed</small>
+                </div>
                 <div v-else-if="store.currentQuestion?.formalTerm" class="formal-term mt-4">
                   <span>Term to remember</span>
                   <strong>{{ store.currentQuestion.formalTerm.name }}</strong>

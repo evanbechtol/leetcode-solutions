@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AlgorithmBuilderConfig } from '../types'
-import { evaluateAlgorithmOrder, evaluateSelectedOption } from './questionEvaluation'
+import { evaluateAlgorithmOrder, evaluateCodeConstructionChoice, evaluateSelectedOption } from './questionEvaluation'
 
 const builder: AlgorithmBuilderConfig = {
   steps: [
@@ -25,5 +25,19 @@ describe('interactive question evaluation', () => {
     expect(evaluateSelectedOption(2, null)).toEqual({ ready: false, correct: false })
     expect(evaluateSelectedOption(2, 1)).toEqual({ ready: true, correct: false })
     expect(evaluateSelectedOption(2, 2)).toEqual({ ready: true, correct: true })
+  })
+
+  it('grades one code-construction choice without revealing another choice', () => {
+    const step = {
+      id: 'initialize', concept: 'Initialize state', prerequisites: [], correctChoiceId: 'map',
+      choices: [
+        { id: 'map', codeByLanguage: { Python: 'seen = {}' }, feedback: 'This creates the required lookup state.' },
+        { id: 'list', codeByLanguage: { Python: 'seen = []' }, feedback: 'A list does not provide keyed lookup.' },
+      ],
+      stateEffect: 'An empty lookup exists.', exampleState: 'seen = {}', explanation: 'The map stores earlier values.', hints: [],
+    }
+    expect(evaluateCodeConstructionChoice(step, null)).toEqual({ ready: false, correct: false, feedback: '' })
+    expect(evaluateCodeConstructionChoice(step, 'list')).toEqual({ ready: true, correct: false, feedback: 'A list does not provide keyed lookup.' })
+    expect(evaluateCodeConstructionChoice(step, 'map').correct).toBe(true)
   })
 })

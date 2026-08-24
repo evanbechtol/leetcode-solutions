@@ -9,7 +9,7 @@ export type QuestionType =
   | 'Complexity'
 
 export type LegacyQuestionType = 'Time Complexity' | 'Space Complexity'
-export type QuestionFormat = 'multiple-choice' | 'algorithm-builder' | 'iteration-visualization'
+export type QuestionFormat = 'multiple-choice' | 'algorithm-builder' | 'iteration-visualization' | 'code-construction'
 
 export type QuestionStage =
   | 'contract'
@@ -38,6 +38,32 @@ export interface AlgorithmBuilderConfig {
   correctOrder: string[]
 }
 
+export interface CodeConstructionChoice {
+  id: string
+  codeByLanguage: Record<string, string>
+  feedback: string
+}
+
+export interface CodeConstructionStep {
+  id: string
+  concept: string
+  prerequisites: string[]
+  correctChoiceId: string
+  choices: CodeConstructionChoice[]
+  stateEffect: string
+  exampleState: string
+  explanation: string
+  hints: HintLevel[]
+}
+
+export interface CodeConstructionConfig {
+  languages: string[]
+  exampleInput: string
+  openingByLanguage: Record<string, string>
+  closingByLanguage: Record<string, string>
+  steps: CodeConstructionStep[]
+}
+
 export interface VisualizationFrame {
   id: string
   phase: string
@@ -55,6 +81,16 @@ export interface VisualizationFrame {
     previousValue?: string
     changed?: boolean
     role: 'input' | 'control' | 'state' | 'output'
+  }>
+  structures?: Array<{
+    name: string
+    kind: 'array' | 'string' | 'map' | 'queue' | 'graph' | 'tree' | 'set'
+    description: string
+    items: Array<{
+      key: string
+      value: string
+      status?: 'active' | 'processed' | 'candidate' | 'discarded' | 'queued' | 'result'
+    }>
   }>
   invariant: string
 }
@@ -79,7 +115,14 @@ export interface IterationVisualizationInteractionState {
   selectedAnswer: number | null
 }
 
-export type QuestionInteractionState = AlgorithmBuilderInteractionState | IterationVisualizationInteractionState
+export interface CodeConstructionInteractionState {
+  format: 'code-construction'
+  completedStepIds: string[]
+  selectedChoiceId: string | null
+  lastCheckedChoiceId: string | null
+}
+
+export type QuestionInteractionState = AlgorithmBuilderInteractionState | IterationVisualizationInteractionState | CodeConstructionInteractionState
 
 export interface TeachingContext {
   title: string
@@ -89,6 +132,12 @@ export interface TeachingContext {
 export interface FormalTerm {
   name: string
   definition: string
+}
+
+export interface HintLevel {
+  id: 'cue' | 'concept' | 'worked-step'
+  label: string
+  text: string
 }
 
 export interface QuizQuestion {
@@ -101,10 +150,14 @@ export interface QuizQuestion {
   answer: number
   explanation: string
   hint: string
+  hintLevels?: HintLevel[]
+  prerequisites?: QuestionStage[]
+  readingLevelNotes?: string[]
   teachingContext?: TeachingContext
   formalTerm?: FormalTerm
   optionFeedback?: string[]
   builder?: AlgorithmBuilderConfig
+  construction?: CodeConstructionConfig
   visualization?: IterationVisualizationConfig
 }
 
