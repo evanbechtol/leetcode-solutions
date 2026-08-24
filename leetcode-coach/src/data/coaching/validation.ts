@@ -64,9 +64,27 @@ export const validateCoachingContent = (problems: Problem[]) => {
         if (!['contract', 'time-complexity', 'space-complexity'].includes(question.stage ?? '') && question.options.some((option) => wordCount(option) > 32)) errors.push(`${question.id}: answer option exceeds 32 words.`)
       }
       if (format === 'iteration-visualization') {
-        const frames = question.visualization?.frames
-        if (!frames || frames.length < 5) errors.push(`${question.id}: visualization must contain at least five execution frames.`)
-        if (frames?.some((frame) => !frame.title.trim() || !frame.action.trim() || !frame.invariant.trim() || frame.state.length < 2)) errors.push(`${question.id}: every visualization frame needs action, state, and invariant content.`)
+        const visualization = question.visualization
+        const frames = visualization?.frames
+        if (!visualization?.input.trim() || !visualization.expectedOutput.trim() || !visualization.code.trim() || !visualization.language.trim()) errors.push(`${question.id}: visualization requires input, output, code, and language.`)
+        if (!frames || frames.length < 6) errors.push(`${question.id}: visualization must contain at least six execution frames.`)
+        if (frames?.some((frame) =>
+          !frame.title.trim()
+          || !frame.action.trim()
+          || !frame.invariant.trim()
+          || !frame.input.trim()
+          || !frame.expectedOutput.trim()
+          || !frame.currentOutput.trim()
+          || !frame.processed.trim()
+          || !frame.remaining.trim()
+          || frame.variables.length < 4
+        )) errors.push(`${question.id}: every visualization frame needs complete input, output, progress, variable, action, and invariant state.`)
+        if (frames?.some((frame) => new Set(frame.variables.map(({ name }) => name)).size !== frame.variables.length)) errors.push(`${question.id}: visualization variable names must be unique within a frame.`)
+        if (frames?.some((frame) => frame.variables.some(({ name, value, role }) => !name.trim() || !value.trim() || !['input', 'control', 'state', 'output'].includes(role)))) errors.push(`${question.id}: visualization variables require names, values, and valid roles.`)
+        const codeLineCount = visualization?.code.split('\n').length ?? 0
+        if (frames?.some((frame) => !frame.activeCodeLines.length || frame.activeCodeLines.some((line) => line < 0 || line >= codeLineCount))) errors.push(`${question.id}: every visualization frame must reference valid active code lines.`)
+        if (frames?.some((frame) => frame.input !== visualization?.input || frame.expectedOutput !== visualization?.expectedOutput)) errors.push(`${question.id}: every frame must retain the concrete example input and expected output.`)
+        if (frames?.slice(1).some((frame) => !frame.variables.some(({ changed }) => changed))) errors.push(`${question.id}: every state-changing frame must identify at least one changed variable.`)
       }
       if ([question.prompt, question.explanation, question.hint, ...question.options].some((value) => !value.trim() || /TODO|placeholder/i.test(value))) errors.push(`${question.id}: empty or placeholder content.`)
     })

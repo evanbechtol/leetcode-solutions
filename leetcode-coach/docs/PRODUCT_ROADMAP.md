@@ -107,7 +107,7 @@ The learner selects four phases from a larger bank and places them in dependency
 
 #### Iteration visualization
 
-The fifth question presents a five-frame walkthrough after the learner has identified the data structure and invariant. It covers input, initialization, the first update, repeated updates, termination, maintained state, and an invariant checkpoint before asking a graded trace question.
+The fifth question presents a six-frame execution trace after the learner has identified the data structure and invariant. Every frame retains the concrete input and expected output, reports the output at that step, separates processed from remaining work, shows named variables with before/after changes, highlights the active canonical-code lines, and includes an invariant checkpoint before the graded trace question.
 
 ### Learning library and reference tools — Complete
 

@@ -23,6 +23,15 @@ describe('deterministic coaching catalog', () => {
       expect(problem.questions.every(({ prompt }) => prompt.trim().split(/\s+/).length <= 24)).toBe(true)
       expect(problem.questions.filter(({ format }) => format === 'algorithm-builder')).toHaveLength(1)
       expect(problem.questions.filter(({ format }) => format === 'iteration-visualization')).toHaveLength(1)
+      const visualization = problem.questions[4].visualization!
+      expect(visualization.frames).toHaveLength(6)
+      expect(visualization.code.trim()).not.toBe('')
+      for (const frame of visualization.frames) {
+        expect(frame.input).toBe(visualization.input)
+        expect(frame.expectedOutput).toBe(visualization.expectedOutput)
+        expect(frame.variables.length).toBeGreaterThanOrEqual(4)
+        expect(frame.activeCodeLines.length).toBeGreaterThan(0)
+      }
     }
     expect(DEEP_PROBLEM_IDS).toHaveLength(30)
   })

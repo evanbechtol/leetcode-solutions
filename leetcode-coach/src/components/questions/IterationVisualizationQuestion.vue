@@ -14,6 +14,7 @@ const furthestFrame = ref(restored?.furthestFrame ?? 0)
 const selectedAnswer = ref<number | null>(restored?.selectedAnswer ?? null)
 const config = computed(() => props.question.visualization!)
 const frame = computed(() => config.value.frames[frameIndex.value])
+const codeLines = computed(() => config.value.code.split('\n'))
 const finalFrame = computed(() => frameIndex.value === config.value.frames.length - 1)
 const evaluation = computed(() => evaluateSelectedOption(props.question.answer, selectedAnswer.value))
 const isCorrect = computed(() => evaluation.value.correct)
@@ -49,7 +50,11 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
 
 <template>
   <div class="iteration-visualizer mt-7">
-    <div class="visualizer-input"><span>Concrete input</span><code>{{ config.input }}</code></div>
+    <div class="visualizer-io">
+      <div><span>Example input</span><code>{{ frame.input }}</code></div>
+      <div><span>Expected output</span><code>{{ frame.expectedOutput }}</code></div>
+      <div class="current-output"><span>Output at this step</span><code>{{ frame.currentOutput }}</code></div>
+    </div>
 
     <div class="visualizer-timeline" role="tablist" aria-label="Algorithm execution frames">
       <button
@@ -69,9 +74,35 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
     <section class="visualizer-frame" aria-live="polite">
       <header><span>{{ frame.phase }}</span><h3>{{ frame.title }}</h3></header>
       <div class="visualizer-action"><v-icon icon="mdi-play-circle-outline" /><p>{{ frame.action }}</p></div>
-      <div class="visualizer-state">
-        <div v-for="item in frame.state" :key="item.label"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></div>
+
+      <div class="visualizer-progress-state">
+        <div><span>Processed</span><strong>{{ frame.processed }}</strong></div>
+        <div><span>Remaining</span><strong>{{ frame.remaining }}</strong></div>
       </div>
+
+      <div class="visualizer-section-heading">
+        <div><span>State snapshot</span><strong>Variables after this step</strong></div>
+        <small><i /> changed value</small>
+      </div>
+      <div class="visualizer-variables" role="table" aria-label="Algorithm variable state">
+        <div v-for="variable in frame.variables" :key="variable.name" class="visualizer-variable" :class="[`role-${variable.role}`, { changed: variable.changed }]" role="row">
+          <div class="variable-name" role="cell"><code>{{ variable.name }}</code><span>{{ variable.role }}</span></div>
+          <div class="variable-value" role="cell">
+            <small v-if="variable.previousValue">{{ variable.previousValue }}<v-icon icon="mdi-arrow-right" size="13" /></small>
+            <strong>{{ variable.value }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="visualizer-code">
+        <header><div><span>Canonical algorithm</span><strong>Active lines for this step</strong></div><code>{{ config.language }}</code></header>
+        <ol>
+          <li v-for="(line, index) in codeLines" :key="index" :class="{ active: frame.activeCodeLines.includes(index) }">
+            <span>{{ index + 1 }}</span><code>{{ line || ' ' }}</code>
+          </li>
+        </ol>
+      </div>
+
       <div class="visualizer-invariant"><v-icon icon="mdi-shield-check-outline" /><div><span>Invariant checkpoint</span><p>{{ frame.invariant }}</p></div></div>
     </section>
 

@@ -6,11 +6,11 @@ import type {
   QuestionType,
   QuizQuestion,
   TeachingContext,
-  VisualizationFrame,
 } from '../../types'
 import { beginnerPatternProfiles, type BeginnerPatternProfile } from './beginnerProfiles'
 import { DEEP_PROBLEM_IDS, problemTeachingFacts } from './problemFacts'
 import { patternProfiles, type PatternProfile } from './patterns'
+import { buildExecutionTrace } from './executionTrace'
 
 interface Choice { text: string; correct: boolean; feedback: string }
 interface Guidance { teachingContext: TeachingContext; formalTerm: FormalTerm }
@@ -100,39 +100,19 @@ const visualizationQuestion = (
     'The right action must use the current item and leave the stored information ready for the next one.',
     guidance('Watch the information change', 'Move through the frames slowly. At each frame, notice what changed and what stayed true.', 'Iteration', 'One repeated pass through a step of an algorithm.'),
   )
-  const frames: VisualizationFrame[] = [
-    {
-      id: 'input', phase: 'Start', title: 'Read the example',
-      action: 'Identify the given input and the result the function must produce.',
-      state: [{ label: 'Input', value: input }, { label: 'Goal', value: output }],
-      invariant: 'No work has been processed yet.',
+  const frames = buildExecutionTrace(problem, beginner, input, output)
+  return {
+    ...base,
+    id: `${problem.id}:static-v4:visualization`,
+    format: 'iteration-visualization',
+    visualization: {
+      input,
+      expectedOutput: output,
+      code: problem.solution,
+      language: problem.solutionLanguage ?? 'TypeScript',
+      frames,
     },
-    {
-      id: 'initialize', phase: 'Set up', title: 'Create what the solution needs to remember',
-      action: beginner.memory,
-      state: [{ label: 'Memory', value: beginner.memory }, { label: 'Progress', value: 'Nothing processed yet' }],
-      invariant: 'The starting state correctly represents no completed work.',
-    },
-    {
-      id: 'first-update', phase: 'First step', title: 'Process one piece of work',
-      action: beginner.step,
-      state: [{ label: 'Action', value: beginner.step }, { label: 'Progress', value: 'One item, node, edge, or choice is handled' }],
-      invariant: beginner.promise,
-    },
-    {
-      id: 'repeat', phase: 'Repeat', title: 'Use the same safe step again',
-      action: beginner.step,
-      state: [{ label: 'What changes', value: 'The stored information and the amount of completed work' }, { label: 'What stays true', value: beginner.promise }],
-      invariant: beginner.promise,
-    },
-    {
-      id: 'finish', phase: 'Finish', title: 'Read the answer from the final state',
-      action: beginner.why,
-      state: [{ label: 'Output', value: output }, { label: 'Why it works', value: beginner.why }],
-      invariant: 'All required work is complete, so the final state gives the requested result.',
-    },
-  ]
-  return { ...base, id: `${problem.id}:static-v3:visualization`, format: 'iteration-visualization', visualization: { input, frames } }
+  }
 }
 
 const algorithmBuilderQuestion = (problem: Problem, profile: PatternProfile, beginner: BeginnerPatternProfile): QuizQuestion => {

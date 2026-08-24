@@ -43,12 +43,27 @@ export interface VisualizationFrame {
   phase: string
   title: string
   action: string
-  state: Array<{ label: string; value: string }>
+  input: string
+  expectedOutput: string
+  currentOutput: string
+  processed: string
+  remaining: string
+  activeCodeLines: number[]
+  variables: Array<{
+    name: string
+    value: string
+    previousValue?: string
+    changed?: boolean
+    role: 'input' | 'control' | 'state' | 'output'
+  }>
   invariant: string
 }
 
 export interface IterationVisualizationConfig {
   input: string
+  expectedOutput: string
+  code: string
+  language: string
   frames: VisualizationFrame[]
 }
 
