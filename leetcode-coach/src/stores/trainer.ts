@@ -1,9 +1,10 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { problems } from '../data/problems'
-import type { AnswerRecord, Filters, ProblemResult, QuestionFormat, QuestionType, QuizQuestion } from '../types'
+import type { AnswerRecord, Filters, ProblemResult, QuestionFormat, QuestionInteractionState, QuestionType, QuizQuestion } from '../types'
 import { drawRandomProblem } from '../utils/randomSelection'
 import { hasDataStructureGateBeforeAlgorithms, sequenceDataStructureBeforeAlgorithms } from '../utils/questionSequence'
+import { ACTIVE_PROBLEM_SESSION_KEY, parseActiveProblemSession } from '../utils/activeProblemSession'
 
 const STORAGE_KEY = 'pathfinder-progress-v1'
 const QUIZ_CACHE_KEY = 'pathfinder-generated-quizzes-v1'
@@ -56,6 +57,8 @@ export const useTrainerStore = defineStore('trainer', () => {
   const answerCorrect = ref<boolean | null>(null)
   const firstTryCorrect = ref(0)
   const attemptedCurrent = ref(new Set<string>())
+  const interactionState = ref<QuestionInteractionState | null>(null)
+  const problemComplete = ref(false)
   const activeQuestions = ref<QuizQuestion[]>([])
   const quizCache = ref<Record<number, QuizQuestion[]>>((() => {
     try { return JSON.parse(localStorage.getItem(QUIZ_CACHE_KEY) || '{}') }
@@ -106,17 +109,66 @@ export const useTrainerStore = defineStore('trainer', () => {
   }, { deep: true })
   watch(quizCache, () => localStorage.setItem(QUIZ_CACHE_KEY, JSON.stringify(quizCache.value)), { deep: true })
 
-  function initializeProblem(problemId: number) {
-    const selected = availableProblems.value.find((problem) => problem.id === problemId)
-    if (!selected) return false
-    currentProblemId.value = selected.id
-    activeQuestions.value = selected.questions.length ? selected.questions : (quizCache.value[selected.id] || [])
+  watch([
+    currentProblemId,
+    currentQuestionIndex,
+    selectedAnswer,
+    submitted,
+    answerCorrect,
+    firstTryCorrect,
+    attemptedCurrent,
+    interactionState,
+    problemComplete,
+    activeQuestions,
+  ], () => {
+    if (currentProblemId.value === null || !currentQuestion.value) return
+    localStorage.setItem(ACTIVE_PROBLEM_SESSION_KEY, JSON.stringify({
+      version: 1,
+      problemId: currentProblemId.value,
+      questionId: currentQuestion.value.id,
+      questionIndex: currentQuestionIndex.value,
+      selectedAnswer: selectedAnswer.value,
+      submitted: submitted.value,
+      answerCorrect: answerCorrect.value,
+      firstTryCorrect: firstTryCorrect.value,
+      attemptedQuestionIds: [...attemptedCurrent.value],
+      interactionState: interactionState.value,
+      completed: problemComplete.value,
+    }))
+  }, { deep: true })
+
+  function resetProblemSessionState() {
     currentQuestionIndex.value = 0
     selectedAnswer.value = null
     submitted.value = false
     answerCorrect.value = null
     firstTryCorrect.value = 0
     attemptedCurrent.value = new Set()
+    interactionState.value = null
+    problemComplete.value = false
+  }
+
+  function initializeProblem(problemId: number) {
+    const selected = availableProblems.value.find((problem) => problem.id === problemId)
+    if (!selected) return false
+    const questions = selected.questions.length ? selected.questions : (quizCache.value[selected.id] || [])
+    const rawSession = localStorage.getItem(ACTIVE_PROBLEM_SESSION_KEY)
+    const restored = parseActiveProblemSession(rawSession, selected.id, questions)
+    if (rawSession && !restored) localStorage.removeItem(ACTIVE_PROBLEM_SESSION_KEY)
+
+    currentProblemId.value = selected.id
+    activeQuestions.value = questions
+    resetProblemSessionState()
+    if (restored) {
+      currentQuestionIndex.value = restored.questionIndex
+      selectedAnswer.value = restored.selectedAnswer
+      submitted.value = restored.submitted
+      answerCorrect.value = restored.answerCorrect
+      firstTryCorrect.value = restored.firstTryCorrect
+      attemptedCurrent.value = new Set(restored.attemptedQuestionIds)
+      interactionState.value = restored.interactionState
+      problemComplete.value = restored.completed
+    }
     return true
   }
 
@@ -144,14 +196,10 @@ export const useTrainerStore = defineStore('trainer', () => {
   }
 
   function clearCurrentProblem() {
+    localStorage.removeItem(ACTIVE_PROBLEM_SESSION_KEY)
     currentProblemId.value = null
     activeQuestions.value = []
-    currentQuestionIndex.value = 0
-    selectedAnswer.value = null
-    submitted.value = false
-    answerCorrect.value = null
-    firstTryCorrect.value = 0
-    attemptedCurrent.value = new Set()
+    resetProblemSessionState()
   }
 
   function setGeneratedQuestions(questions: QuizQuestion[]) {
@@ -202,6 +250,11 @@ export const useTrainerStore = defineStore('trainer', () => {
     selectedAnswer.value = null
     submitted.value = false
     answerCorrect.value = null
+    interactionState.value = null
+  }
+
+  function setInteractionState(state: QuestionInteractionState | null) {
+    interactionState.value = state
   }
 
   function nextQuestion() {
@@ -211,9 +264,13 @@ export const useTrainerStore = defineStore('trainer', () => {
       selectedAnswer.value = null
       submitted.value = false
       answerCorrect.value = null
+      interactionState.value = null
       return true
     }
-    results.value.push({ problemId: currentProblem.value.id, completedAt: new Date().toISOString(), correct: firstTryCorrect.value, total: activeQuestions.value.length })
+    if (!problemComplete.value) {
+      results.value.push({ problemId: currentProblem.value.id, completedAt: new Date().toISOString(), correct: firstTryCorrect.value, total: activeQuestions.value.length })
+      problemComplete.value = true
+    }
     return false
   }
 
@@ -223,12 +280,13 @@ export const useTrainerStore = defineStore('trainer', () => {
     streak.value = 0
     bestStreak.value = 0
     localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(ACTIVE_PROBLEM_SESSION_KEY)
   }
 
   return {
     answers, results, streak, bestStreak, currentProblemId, currentQuestionIndex, selectedAnswer, submitted, answerCorrect,
-    firstTryCorrect, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
+    firstTryCorrect, interactionState, problemComplete, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
     totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, topicMastery, aiCoachEnabled, catalogSize: problems.length, startProblem,
-    pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, tryAgain, nextQuestion, resetProgress,
+    pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, tryAgain, setInteractionState, nextQuestion, resetProgress,
   }
 })

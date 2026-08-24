@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { QuizQuestion } from '../../types'
+import type { QuestionInteractionState, QuizQuestion } from '../../types'
 import { evaluateAlgorithmOrder } from '../../utils/questionEvaluation'
 
-const props = defineProps<{ question: QuizQuestion; submitted: boolean }>()
+const props = defineProps<{ question: QuizQuestion; submitted: boolean; initialState?: QuestionInteractionState | null }>()
 const emit = defineEmits<{
-  (event: 'response-change', response: { ready: boolean; correct: boolean; feedback: string }): void
+  (event: 'response-change', response: { ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState }): void
 }>()
 
-const chosenIds = ref<string[]>([])
+const validStepIds = new Set(props.question.builder?.steps.map(({ id }) => id) ?? [])
+const restoredIds = props.initialState?.format === 'algorithm-builder'
+  ? props.initialState.chosenIds.filter((id) => validStepIds.has(id))
+  : []
+const chosenIds = ref<string[]>(restoredIds)
 const config = computed(() => props.question.builder!)
 const requiredCount = computed(() => config.value.correctOrder.length)
 const chosenSteps = computed(() => chosenIds.value.map((id) => config.value.steps.find((step) => step.id === id)!))
@@ -19,7 +23,7 @@ const firstMismatch = computed(() => evaluation.value.firstMismatch)
 
 function feedback() {
   if (isCorrect.value) return props.question.explanation
-  if (firstMismatch.value >= 0) return `Reconsider step ${firstMismatch.value + 1}. That choice does not have the prerequisites established by the preceding steps.`
+  if (firstMismatch.value >= 0) return `Look again at step ${firstMismatch.value + 1}. Does everything that step needs already exist?`
   return props.question.hint
 }
 
@@ -45,6 +49,7 @@ watch(chosenIds, () => emit('response-change', {
   ready: evaluation.value.ready,
   correct: isCorrect.value,
   feedback: feedback(),
+  state: { format: 'algorithm-builder', chosenIds: [...chosenIds.value] },
 }), { deep: true, immediate: true })
 </script>
 
@@ -52,7 +57,7 @@ watch(chosenIds, () => emit('response-change', {
   <div class="algorithm-builder mt-7">
     <div class="builder-instruction">
       <v-icon icon="mdi-order-numeric-ascending" size="19" />
-      <span>Choose {{ requiredCount }} phases. Each phase must have everything it needs before it runs.</span>
+      <span>Choose {{ requiredCount }} steps. Ask what must happen before the next step can work.</span>
     </div>
 
     <ol class="builder-sequence" aria-label="Your algorithm sequence">
@@ -71,20 +76,20 @@ watch(chosenIds, () => emit('response-change', {
           <small v-if="submitted && isCorrect">{{ chosenSteps[index].reason }}</small>
           <span v-else-if="!submitted">Tap to remove</span>
         </button>
-        <div v-else class="builder-empty">Choose the next phase</div>
+        <div v-else class="builder-empty">Choose what happens next</div>
       </li>
     </ol>
 
     <div v-if="!submitted" class="builder-controls">
-      <span>{{ chosenIds.length }}/{{ requiredCount }} phases placed</span>
+      <span>{{ chosenIds.length }}/{{ requiredCount }} steps placed</span>
       <div>
         <v-btn size="small" variant="text" prepend-icon="mdi-undo" :disabled="!chosenIds.length" @click="undo">Undo</v-btn>
         <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :disabled="!chosenIds.length" @click="reset">Reset</v-btn>
       </div>
     </div>
 
-    <div v-if="!submitted" class="builder-bank" aria-label="Available algorithm phases">
-      <div class="box-label">Available phases</div>
+    <div v-if="!submitted" class="builder-bank" aria-label="Available algorithm steps">
+      <div class="box-label">Available steps</div>
       <button
         v-for="step in availableSteps"
         :key="step.id"

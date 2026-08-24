@@ -2,13 +2,27 @@ import type { Problem } from '../../types'
 import { compileQuestionPath } from './compiler'
 import { DEEP_PROBLEM_IDS, problemTeachingFacts } from './problemFacts'
 import { patternProfiles, rawTagPatternMap } from './patterns'
+import { beginnerPatternProfiles } from './beginnerProfiles'
 import { hasDataStructureGateBeforeAlgorithms } from '../../utils/questionSequence'
+
+const wordCount = (value: string) => value.trim().split(/\s+/).filter(Boolean).length
 
 export const validateCoachingContent = (problems: Problem[]) => {
   const errors: string[] = []
   // The external dataset contains 134 entries; two curated-only problems (121 and 704) bring the merged catalog to 136.
   if (problems.length !== 136) errors.push(`Expected 136 merged catalog problems; found ${problems.length}.`)
   const catalogIds = new Set(problems.map(({ id }) => id))
+  for (const pattern of Object.keys(patternProfiles)) {
+    const beginner = beginnerPatternProfiles[pattern as keyof typeof beginnerPatternProfiles]
+    if (!beginner) {
+      errors.push(`${pattern}: missing beginner-facing pattern content.`)
+      continue
+    }
+    for (const [field, value] of Object.entries(beginner)) {
+      if (!value.trim()) errors.push(`${pattern}.${field}: beginner-facing content is empty.`)
+      if (wordCount(value) > 32) errors.push(`${pattern}.${field}: beginner-facing content exceeds 32 words.`)
+    }
+  }
   for (const problem of problems) {
     const fact = problemTeachingFacts[problem.id]
     if (!fact) {
@@ -27,6 +41,14 @@ export const validateCoachingContent = (problems: Problem[]) => {
     if (!hasDataStructureGateBeforeAlgorithms(path)) errors.push(`${problem.id}: data-structure identification must precede every algorithm-dependent question.`)
     path.forEach((question) => {
       const format = question.format ?? 'multiple-choice'
+      if (!question.teachingContext?.title.trim() || !question.teachingContext.body.trim()) errors.push(`${question.id}: missing beginner teaching context.`)
+      if (!question.formalTerm?.name.trim() || !question.formalTerm.definition.trim()) errors.push(`${question.id}: missing formal-term reveal.`)
+      if (wordCount(question.prompt) > 24) errors.push(`${question.id}: prompt exceeds 24 words.`)
+      if (wordCount(question.hint) > 32) errors.push(`${question.id}: hint exceeds 32 words.`)
+      if (question.teachingContext && wordCount(question.teachingContext.body) > 32) errors.push(`${question.id}: teaching context exceeds 32 words.`)
+      if (question.formalTerm && wordCount(question.formalTerm.definition) > 24) errors.push(`${question.id}: formal definition exceeds 24 words.`)
+      const learnerCopy = [question.prompt, question.hint, question.teachingContext?.body ?? '', ...question.options].join(' ')
+      if (/proof obligation|monotonic predicate|structural induction|optimal substructure/i.test(learnerCopy)) errors.push(`${question.id}: learner-facing copy contains unexplained advanced language.`)
       if (format === 'algorithm-builder') {
         const builder = question.builder
         if (!builder || builder.steps.length < 6) errors.push(`${question.id}: builder must contain at least six candidate steps.`)
@@ -34,10 +56,12 @@ export const validateCoachingContent = (problems: Problem[]) => {
         if (builder && new Set(builder.steps.map(({ id }) => id)).size !== builder.steps.length) errors.push(`${question.id}: builder step ids must be unique.`)
         if (builder && builder.correctOrder.some((id) => !builder.steps.some((step) => step.id === id))) errors.push(`${question.id}: builder order references an unknown step.`)
         if (builder?.steps.some((step) => !step.text.trim() || !step.reason.trim())) errors.push(`${question.id}: builder steps require text and reasoning.`)
+        if (builder?.steps.some((step) => wordCount(step.text) > 32)) errors.push(`${question.id}: builder step exceeds 32 words.`)
       } else {
         if (question.options.length !== 4 || new Set(question.options).size !== 4) errors.push(`${question.id}: options must contain four unique values.`)
         if (question.answer < 0 || question.answer > 3) errors.push(`${question.id}: answer is out of bounds.`)
         if (question.optionFeedback?.length !== 4) errors.push(`${question.id}: missing option-specific feedback.`)
+        if (!['contract', 'time-complexity', 'space-complexity'].includes(question.stage ?? '') && question.options.some((option) => wordCount(option) > 32)) errors.push(`${question.id}: answer option exceeds 32 words.`)
       }
       if (format === 'iteration-visualization') {
         const frames = question.visualization?.frames

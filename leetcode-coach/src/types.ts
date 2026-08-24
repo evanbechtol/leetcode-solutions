@@ -52,6 +52,30 @@ export interface IterationVisualizationConfig {
   frames: VisualizationFrame[]
 }
 
+export interface AlgorithmBuilderInteractionState {
+  format: 'algorithm-builder'
+  chosenIds: string[]
+}
+
+export interface IterationVisualizationInteractionState {
+  format: 'iteration-visualization'
+  frameIndex: number
+  furthestFrame: number
+  selectedAnswer: number | null
+}
+
+export type QuestionInteractionState = AlgorithmBuilderInteractionState | IterationVisualizationInteractionState
+
+export interface TeachingContext {
+  title: string
+  body: string
+}
+
+export interface FormalTerm {
+  name: string
+  definition: string
+}
+
 export interface QuizQuestion {
   id: string
   type: QuestionType | LegacyQuestionType
@@ -62,6 +86,8 @@ export interface QuizQuestion {
   answer: number
   explanation: string
   hint: string
+  teachingContext?: TeachingContext
+  formalTerm?: FormalTerm
   optionFeedback?: string[]
   builder?: AlgorithmBuilderConfig
   visualization?: IterationVisualizationConfig

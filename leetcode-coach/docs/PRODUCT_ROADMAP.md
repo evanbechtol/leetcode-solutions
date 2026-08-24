@@ -43,6 +43,15 @@ Pathfinder should teach users how to derive an optimal solution, not merely reco
 - Contract comprehension should lead to data-structure identification before a specific algorithm is named or implemented. State should then lead to pattern, invariant, transition, proof, and complexity.
 - Repeated practice should ask the learner to produce more of the reasoning rather than only recognize it.
 
+### Concrete before formal
+
+- Introduce a concept through a small example or observable state change before relying on its academic name.
+- Use plain language first and attach the formal term second: for example, “what must stay true after every step (the invariant).”
+- Do not remove fundamental vocabulary. Define it at the moment the learner has enough context to understand it.
+- Ask one new conceptual decision at a time. A question should not require unexplained knowledge from several later lesson sections.
+- After a correct answer, connect the learner’s intuition to the precise definition, proof obligation, or complexity rule.
+- Beginner-friendly wording is the default, not a separate simplified curriculum. Optional depth can expand the explanation without changing correctness.
+
 ### Deterministic core, optional AI
 
 - The complete core curriculum must work locally and on GitHub Pages without AI.
@@ -71,6 +80,8 @@ Pathfinder should teach users how to derive an optimal solution, not merely reco
 - Ten questions in a standard path and thirteen in a deep representative path.
 - Filtering by difficulty, problem set, topic, and algorithm.
 - Static hints and reviewed pattern/problem facts; AI is not required.
+- Plain-language prompts, choices, hints, walkthroughs, and builder steps for every deterministic path.
+- Short teaching context before each decision and a formal term revealed after a correct answer.
 
 ### Current reasoning categories — Complete
 
@@ -108,6 +119,7 @@ The fifth question presents a five-frame walkthrough after the learner has ident
 ### Progress and deployment — Complete
 
 - Browser-local answer history, accuracy, streaks, completed paths, and topic mastery.
+- Active problem sessions survive a refresh and are cleared when the learner leaves that problem.
 - Accuracy by reasoning category and interaction format.
 - Static production build suitable for local use and GitHub Pages.
 - Optional AI service remains behind an explicit development flag.
@@ -118,6 +130,7 @@ The fifth question presents a five-frame walkthrough after the learner has ident
 | --- | --- | --- |
 | Foundation | Deterministic catalog, lessons, profiles, references, and static deployment | Complete |
 | Interactive reasoning | Algorithm construction and conceptual execution walkthroughs | Complete |
+| Guided discovery | Beginner-first explanations and incremental code construction | In progress |
 | Production practice | Counterexamples, edge cases, complexity derivation, and test design | Next |
 | Concrete tracing | Problem-specific state animations and code/state synchronization | Planned |
 | Adaptive mastery | Spaced repetition, proficiency modeling, and personalized queues | Planned |
@@ -125,7 +138,141 @@ The fifth question presents a five-frame walkthrough after the learner has ident
 | Accounts and sync | Authentication, durable progress, and cross-device continuity | Planned |
 | Advanced coaching | Optional rubric-based free response and AI-assisted explanations | Exploration |
 
-## Next milestone: production practice
+## Next milestone: guided discovery
+
+### Beginner-friendly instructional model — Complete / P0
+
+The application should preserve rigorous DSA fundamentals while assuming that a learner may not yet know the vocabulary. The solution is progressive disclosure, not removing the concepts.
+
+**Teaching sequence for a concept:**
+
+1. **Orient:** Explain in one or two sentences what the learner is trying to notice and why it matters.
+2. **Observe:** Show a small concrete input, state snapshot, or comparison.
+3. **Choose:** Ask one focused question in plain language.
+4. **Name:** After the learner succeeds, introduce the formal term and definition.
+5. **Connect:** Explain how the concept constrains the next algorithmic decision.
+6. **Retrieve:** Ask the learner to use the formal concept later without repeating the full explanation.
+
+**Wording rules:**
+
+- Prefer “What must still be true after this step?” before “Which invariant is preserved?”
+- Prefer “What information must we remember?” before “Define the algorithmic state.”
+- Prefer “Can one comparison eliminate half of the remaining choices?” before “Is the predicate monotonic?”
+- Define terms such as frontier, relaxation, amortized, optimal substructure, stable ordering, and auxiliary space before using them as assumed knowledge.
+- Keep sentences short enough that reading comprehension does not become the hidden skill being tested.
+- Avoid distractors that are difficult only because they use unfamiliar terminology.
+
+**Guidance ladder:**
+
+1. Initial prompt with a concrete cue.
+2. First hint that points to the relevant part of the input or state.
+3. Second hint that names the kind of information to track without naming the answer.
+4. Optional worked first step that leaves the remaining decision to the learner.
+5. Formal explanation after a correct answer.
+
+**Recommended schema additions:**
+
+- `teachingContext`: a short explanation shown before the question. Implemented.
+- `formalTerm`: the formal name and concise definition revealed after success. Implemented.
+- `hintLevels`: ordered hints from light cue to worked first step.
+- `prerequisites`: concepts the question is allowed to assume.
+- `readingLevelNotes`: authoring-only warnings for unexplained or overly academic language.
+
+**Acceptance criteria:**
+
+- Every specialized term is defined earlier in the path, in the linked lesson, or directly on the question.
+- The first hint never reveals the correct answer or algorithm name.
+- A learner can answer the question using information already presented in the problem and path.
+- Correct feedback contains both plain-language reasoning and the formal concept.
+- Content review includes a beginner-comprehension pass in addition to the algorithm-accuracy pass.
+- The deterministic validator reports undefined prerequisite concepts and specialized terms introduced too early.
+
+### Incremental code construction — Next / P0
+
+The current algorithm builder orders conceptual phases. The new format should let the learner discover the actual implementation before the completed solution is shown.
+
+**Recommended interaction:**
+
+- Begin with the function signature, input names, and an otherwise incomplete syntax-highlighted code panel.
+- Present one implementation decision at a time.
+- Let the learner select a line, expression, condition, or update from a small bank.
+- Insert a correct choice into the code panel and keep it visible as established work.
+- Explain why the line is needed and how it changes the maintained state.
+- For a wrong choice, explain the misconception without inserting or highlighting the correct line.
+- After important updates, show the corresponding state change on the example input.
+- Reveal the complete canonical implementation only after the learner has constructed all required pieces.
+
+**Recommended construction sequence:**
+
+1. Initialize the required data structure or scalar state.
+2. Choose the traversal, loop guard, recursion base case, or frontier condition.
+3. Compute the key, candidate, midpoint, neighbor, or subproblem state.
+4. Query or update the maintained data structure.
+5. Preserve the invariant and make measurable progress.
+6. Handle the success, failure, or boundary condition.
+7. Return or assemble the final result.
+
+**Example: Two Sum discovery path:**
+
+1. Create an empty mapping for values already visited.
+2. Iterate through each value with its index.
+3. Compute `needed = target - value`.
+4. Check whether `needed` has already been recorded.
+5. Return the stored index and current index when found.
+6. Otherwise record the current value only after the lookup, preventing an element from matching itself.
+
+The learner should make each of these choices. The completed implementation should not appear above or beside the exercise.
+
+**Data model direction:**
+
+```ts
+interface CodeConstructionStep {
+  id: string
+  concept: string
+  prerequisites: string[]
+  correctChoiceId: string
+  choices: Array<{
+    id: string
+    codeByLanguage: Record<string, string>
+    feedback: string
+  }>
+  stateEffect: string
+  explanation: string
+}
+```
+
+The semantic step is language-independent, while reviewed language variants provide actual syntax. This prevents separate Python, Java, C++, Rust, TypeScript, and JavaScript exercises from drifting into different algorithms.
+
+**Typing progression:**
+
+- Introductory: select a complete line from three or four choices.
+- Reinforcing: fill a constrained expression or condition.
+- Transfer: type the next line with local parsing and execution-based validation.
+- Challenge: construct a short block without choices.
+
+Free typing should not be the first version. Equivalent code is difficult to grade safely without execution, and false rejections are especially discouraging for new learners.
+
+**Accuracy and rollout:**
+
+- Do not split arbitrary source code automatically and assume the fragments are pedagogically valid.
+- Hand-author semantic steps and reviewed language renderings.
+- Pilot with five representative problems: Two Sum, Longest Substring Without Repeating Characters, Binary Search, Binary Tree Level Order Traversal, and Course Schedule.
+- Cover hashing, sliding window, binary search, tree BFS, and topological sorting before expanding.
+- Expand to the thirty deep representative problems after the pilot passes accuracy and usability review.
+- Expand to the remaining catalog only when content authoring and independent review can maintain the same standard.
+
+**Acceptance criteria:**
+
+- No unearned portion of the final implementation is visible before its step is completed.
+- Each code choice corresponds to exactly one previously established state, invariant, or transition decision.
+- The assembled code passes canonical examples, edge fixtures, and hidden regression tests.
+- Language variants implement the same algorithm and complexity.
+- Wrong choices receive line-specific feedback without revealing the correct line.
+- Retry clears only the current choice and retains correctly constructed earlier code.
+- Keyboard and touch users can complete the exercise without drag-and-drop.
+- Progress distinguishes conceptual algorithm building from code construction.
+
+## Following milestone: production practice
 
 These formats should be implemented before adding free-form AI grading. Each one can be evaluated deterministically and exercises a skill that multiple-choice questions measure only indirectly.
 
@@ -502,7 +649,16 @@ A format is complete only when:
 
 ## Suggested delivery sequence
 
-### Milestone A: deterministic production skills
+### Milestone A: guided foundations and code discovery
+
+- [x] Plain-language teaching context for every reasoning category
+- [x] Formal-term definitions revealed after intuitive understanding
+- [ ] Multi-level non-revealing hint model
+- [ ] Incremental code-construction schema and renderer
+- [ ] Five-problem code-construction pilot
+- [x] Beginner-comprehension content-review gate
+
+### Milestone B: deterministic production skills
 
 - [ ] Edge-case prediction
 - [ ] Complexity derivation
@@ -510,7 +666,7 @@ A format is complete only when:
 - [ ] Test-case design
 - [ ] Per-format validation and profile analytics
 
-### Milestone B: concrete tracing
+### Milestone C: concrete tracing
 
 - [ ] Exact state fixtures for thirty deep problems
 - [ ] State-diff visual renderer
@@ -518,28 +674,28 @@ A format is complete only when:
 - [ ] Pseudocode synchronization
 - [ ] Reduced-motion and screen-reader verification
 
-### Milestone C: stronger construction and debugging
+### Milestone D: stronger construction and debugging
 
 - [ ] Builder V2 pseudocode blocks
 - [ ] Invariant repair
 - [ ] Bug hunt / first-divergence diagnosis
 - [ ] Solution comparison
 
-### Milestone D: adaptive practice
+### Milestone E: adaptive practice
 
 - [ ] Versioned proficiency model
 - [ ] Spaced-repetition queue
 - [ ] Targeted lesson remediation
 - [ ] Local progress export and import
 
-### Milestone E: coding and durable accounts
+### Milestone F: coding and durable accounts
 
 - [ ] Sandboxed code execution
 - [ ] Submission analysis
 - [ ] Authentication and cross-device synchronization
 - [ ] Privacy, export, and deletion controls
 
-### Milestone F: optional advanced coaching
+### Milestone G: optional advanced coaching
 
 - [ ] Ungraded written reflection
 - [ ] Deterministic self-assessment rubric

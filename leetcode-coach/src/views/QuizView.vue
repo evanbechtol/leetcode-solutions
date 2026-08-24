@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import hljs from 'highlight.js/lib/core'
 import typescript from 'highlight.js/lib/languages/typescript'
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -15,6 +15,7 @@ import AlgorithmBuilderQuestion from '../components/questions/AlgorithmBuilderQu
 import IterationVisualizationQuestion from '../components/questions/IterationVisualizationQuestion.vue'
 import { incorrectFeedbackFor, shouldRevealCorrectChoice } from '../utils/quizFeedback'
 import { parseProblemRouteId, problemRoutePath } from '../utils/problemRoutes'
+import type { QuestionInteractionState } from '../types'
 
 hljs.registerLanguage('typescript', typescript)
 hljs.registerLanguage('javascript', javascript)
@@ -27,7 +28,7 @@ const store = useTrainerStore()
 const route = useRoute()
 const router = useRouter()
 const filterOpen = ref(false)
-const sessionComplete = ref(false)
+const sessionComplete = computed(() => store.problemComplete)
 const copied = ref(false)
 const aiHint = ref('')
 const hintLoading = ref(false)
@@ -36,7 +37,9 @@ const quizError = ref('')
 const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
 const questionPanel = ref<HTMLElement | null>(null)
 const interactionKey = ref(0)
-const interactionResponse = ref({ ready: false, correct: false, feedback: '' })
+const interactionResponse = ref<{ ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState | null }>({
+  ready: false, correct: false, feedback: '', state: null,
+})
 const { preferredLanguage, setPreferredLanguage } = useCodeLanguagePreference()
 
 const progress = computed(() => store.currentProblem
@@ -57,7 +60,7 @@ const revealCorrectChoice = computed(() => shouldRevealCorrectChoice(store.submi
 const canSubmit = computed(() => isMultipleChoice.value ? store.selectedAnswer !== null : interactionResponse.value.ready)
 const actionInstruction = computed(() => ({
   'multiple-choice': 'Select the strongest answer',
-  'algorithm-builder': 'Place all four phases in order',
+  'algorithm-builder': 'Place all four steps in order',
   'iteration-visualization': 'Run every frame, then answer the checkpoint',
 }[currentFormat.value]))
 const checkLabel = computed(() => ({
@@ -97,16 +100,17 @@ function scrollQuestionToTop() {
 }
 
 function resetInteraction() {
-  interactionResponse.value = { ready: false, correct: false, feedback: '' }
+  interactionResponse.value = { ready: false, correct: false, feedback: '', state: null }
   interactionKey.value++
 }
 
-function updateInteraction(response: { ready: boolean; correct: boolean; feedback: string }) {
+function updateInteraction(response: { ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState }) {
   interactionResponse.value = response
+  store.setInteractionState(response.state)
+  if (store.submitted && store.answerCorrect === false) aiHint.value = response.feedback
 }
 
 async function start() {
-  sessionComplete.value = false
   aiHint.value = ''
   quizError.value = ''
   resetInteraction()
@@ -118,7 +122,6 @@ async function start() {
 watch(() => route.params.problemId, async (routeValue) => {
   if (routeValue === undefined) {
     store.clearCurrentProblem()
-    sessionComplete.value = false
     document.title = 'Pathfinder — LeetCode Coach'
     return
   }
@@ -129,8 +132,9 @@ watch(() => route.params.problemId, async (routeValue) => {
     return
   }
 
-  sessionComplete.value = false
-  aiHint.value = ''
+  aiHint.value = store.submitted && store.answerCorrect === false && store.selectedAnswer !== null && store.currentQuestion
+    ? incorrectFeedbackFor(store.currentQuestion, store.selectedAnswer)
+    : ''
   quizError.value = ''
   resetInteraction()
   document.title = `${store.currentProblem?.title} | Pathfinder`
@@ -177,11 +181,14 @@ async function continueQuiz() {
   aiHint.value = ''
   const hasNextQuestion = store.nextQuestion()
   resetInteraction()
-  if (!hasNextQuestion) sessionComplete.value = true
   await nextTick()
   if (hasNextQuestion) scrollQuestionToTop()
   else scrollPageToTop()
 }
+
+onBeforeRouteLeave(() => {
+  store.clearCurrentProblem()
+})
 
 async function checkAnswer() {
   const correct = isMultipleChoice.value
@@ -296,7 +303,7 @@ async function copySolution() {
       </aside>
 
       <main ref="questionPanel" class="coach-panel">
-        <v-card v-if="quizLoading" class="question-card quiz-loading-card pa-8"><v-progress-circular indeterminate color="primary" size="42" /><h2>Mapping the solution path…</h2><p>The coach is turning this problem into five deliberate decisions.</p></v-card>
+        <v-card v-if="quizLoading" class="question-card quiz-loading-card pa-8"><v-progress-circular indeterminate color="primary" size="42" /><h2>Mapping the solution path…</h2><p>The coach is building a guided sequence from the problem statement to the solution.</p></v-card>
         <v-card v-else-if="quizError" class="question-card quiz-loading-card pa-8"><v-icon icon="mdi-connection" color="accent" size="42" /><h2>The AI coach is offline.</h2><p>{{ quizError }}</p><div class="d-flex flex-wrap justify-center ga-3"><v-btn variant="outlined" @click="generateQuiz">Retry</v-btn><v-btn color="primary" @click="start">Choose another</v-btn></div></v-card>
         <template v-else-if="!sessionComplete">
           <div class="quiz-progress mb-7">
@@ -312,12 +319,18 @@ async function copySolution() {
               {{ store.currentQuestion?.type }}
               <span v-if="currentFormat !== 'multiple-choice'">· {{ currentFormat === 'algorithm-builder' ? 'Build' : 'Visualize' }}</span>
             </div>
+            <div v-if="store.currentQuestion?.teachingContext" class="teaching-context mt-5">
+              <span>Before you answer</span>
+              <strong>{{ store.currentQuestion.teachingContext.title }}</strong>
+              <p>{{ store.currentQuestion.teachingContext.body }}</p>
+            </div>
             <h2>{{ store.currentQuestion?.prompt }}</h2>
             <AlgorithmBuilderQuestion
               v-if="currentFormat === 'algorithm-builder' && store.currentQuestion"
               :key="interactionKey"
               :question="store.currentQuestion"
               :submitted="store.submitted"
+              :initial-state="store.interactionState"
               @response-change="updateInteraction"
             />
             <IterationVisualizationQuestion
@@ -325,6 +338,7 @@ async function copySolution() {
               :key="interactionKey"
               :question="store.currentQuestion"
               :submitted="store.submitted"
+              :initial-state="store.interactionState"
               @response-change="updateInteraction"
             />
             <div v-else class="answer-list mt-7" role="radiogroup" :aria-label="store.currentQuestion?.prompt">
@@ -355,6 +369,11 @@ async function copySolution() {
                 <p v-if="!isCorrect && hintLoading" class="hint-loading"><v-progress-circular indeterminate size="16" width="2" /> Your coach is shaping a hint around that choice…</p>
                 <p v-else>{{ isCorrect ? store.currentQuestion?.explanation : (aiHint || store.currentQuestion?.hint) }}</p>
                 <div v-if="!isCorrect" class="why-note"><strong>Leading hint:</strong> {{ store.currentQuestion?.hint }}</div>
+                <div v-else-if="store.currentQuestion?.formalTerm" class="formal-term mt-4">
+                  <span>Term to remember</span>
+                  <strong>{{ store.currentQuestion.formalTerm.name }}</strong>
+                  <p>{{ store.currentQuestion.formalTerm.definition }}</p>
+                </div>
               </div>
             </v-expand-transition>
 
@@ -368,7 +387,7 @@ async function copySolution() {
               </v-btn>
             </div>
           </v-card>
-          <div class="coach-note mt-5"><span class="coach-avatar">P</span><p><strong>Your coach</strong> The goal isn’t to guess. Say the invariant out loud before choosing.</p></div>
+          <div class="coach-note mt-5"><span class="coach-avatar">P</span><p><strong>Your coach</strong> Use the example to test each choice. The formal name comes after the idea makes sense.</p></div>
         </template>
 
         <template v-else>

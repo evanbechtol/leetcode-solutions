@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { QuizQuestion } from '../../types'
+import type { QuestionInteractionState, QuizQuestion } from '../../types'
 import { evaluateSelectedOption } from '../../utils/questionEvaluation'
 
-const props = defineProps<{ question: QuizQuestion; submitted: boolean }>()
+const props = defineProps<{ question: QuizQuestion; submitted: boolean; initialState?: QuestionInteractionState | null }>()
 const emit = defineEmits<{
-  (event: 'response-change', response: { ready: boolean; correct: boolean; feedback: string }): void
+  (event: 'response-change', response: { ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState }): void
 }>()
 
-const frameIndex = ref(0)
-const furthestFrame = ref(0)
-const selectedAnswer = ref<number | null>(null)
+const restored = props.initialState?.format === 'iteration-visualization' ? props.initialState : null
+const frameIndex = ref(restored?.frameIndex ?? 0)
+const furthestFrame = ref(restored?.furthestFrame ?? 0)
+const selectedAnswer = ref<number | null>(restored?.selectedAnswer ?? null)
 const config = computed(() => props.question.visualization!)
 const frame = computed(() => config.value.frames[frameIndex.value])
 const finalFrame = computed(() => frameIndex.value === config.value.frames.length - 1)
@@ -31,12 +32,18 @@ function choose(index: number) {
   if (!props.submitted) selectedAnswer.value = index
 }
 
-watch(selectedAnswer, () => emit('response-change', {
+watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change', {
   ready: evaluation.value.ready,
   correct: isCorrect.value,
   feedback: selectedAnswer.value === null
     ? props.question.hint
     : props.question.optionFeedback?.[selectedAnswer.value] || props.question.hint,
+  state: {
+    format: 'iteration-visualization',
+    frameIndex: frameIndex.value,
+    furthestFrame: furthestFrame.value,
+    selectedAnswer: selectedAnswer.value,
+  },
 }), { immediate: true })
 </script>
 

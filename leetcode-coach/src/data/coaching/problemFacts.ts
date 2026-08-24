@@ -1,4 +1,5 @@
 import type { PatternId, PatternProfile } from './patterns'
+import type { BeginnerPatternProfile } from './beginnerProfiles'
 
 export interface ProblemTeachingFact {
   pattern: PatternId
@@ -6,6 +7,7 @@ export interface ProblemTeachingFact {
   time?: { value: string; reason: string }
   space?: { value: string; reason: string }
   teaching?: Partial<Pick<PatternProfile, 'recognition' | 'state' | 'invariant' | 'transition' | 'correctness' | 'bottleneck' | 'edgeCase' | 'tradeoff'>>
+  beginner?: Partial<BeginnerPatternProfile>
 }
 
 export const DEEP_PROBLEM_IDS = new Set([
@@ -73,6 +75,16 @@ const overrides: Record<number, Partial<ProblemTeachingFact>> = {
       edgeCase: 'Duplicates must stop swapping when the target position already contains the same value, or the loop will not progress.',
       tradeoff: 'In-place index placement achieves linear time and constant auxiliary space but deliberately mutates the input array.',
     },
+    beginner: {
+      clue: 'Values 1 through n can be placed at their matching array positions.',
+      memory: 'Use the input array itself: value x belongs at position x - 1.',
+      promise: 'Each settled position contains its matching value whenever that value exists.',
+      step: 'Swap an in-range value into its matching position until no useful swap remains.',
+      why: 'After placement, the first mismatched position reveals the missing positive.',
+      repeatedWork: 'A separate set stores information the array positions can represent directly.',
+      watchOut: 'Stop when the target already has the same value so duplicates cannot loop.',
+      tradeoff: 'Use constant extra memory by deliberately rearranging the input array.',
+    },
   },
   42: { time: { value: 'O(n)', reason: 'The two boundaries move inward once and never retreat.' }, space: { value: 'O(1)', reason: 'Only two indices, two maxima, and the accumulated water are stored.' } },
   53: { space: { value: 'O(1)', reason: 'Kadane’s algorithm retains only the best ending-here and global-best values.' } },
@@ -104,6 +116,16 @@ const overrides: Record<number, Partial<ProblemTeachingFact>> = {
       bottleneck: 'Collecting and sorting every node costs O(n) work even when only k nearby values are requested.',
       edgeCase: 'When one iterator is exhausted, every remaining answer must come from the other side.',
       tradeoff: 'Two lazy iterators achieve O(h + k) work but require more careful stack updates than a full inorder list.',
+    },
+    beginner: {
+      clue: 'BST order can produce nearby smaller and larger values without reading every node.',
+      memory: 'Keep one stack for the next smaller value and one for the next larger value.',
+      promise: 'The stack tops are the closest unused values on each side of the target.',
+      step: 'Take the closer stack top, then advance only that side through the tree.',
+      why: 'The closest unused value must be one of the two ordered stack tops.',
+      repeatedWork: 'Reading and sorting every node is unnecessary when only k values are needed.',
+      watchOut: 'When one stack is empty, continue only from the other stack.',
+      tradeoff: 'Avoid a full traversal by carefully maintaining two tree iterators.',
     },
   },
   347: { time: { value: 'O(n)', reason: 'Frequency counting and scanning frequency buckets each take linear time.' }, space: { value: 'O(n)', reason: 'The frequency map and buckets can together contain every input value.' } },

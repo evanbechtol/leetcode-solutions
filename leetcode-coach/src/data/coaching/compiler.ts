@@ -1,12 +1,20 @@
-import type { AlgorithmBuildStep, Problem, QuestionStage, QuestionType, QuizQuestion, VisualizationFrame } from '../../types'
+import type {
+  AlgorithmBuildStep,
+  FormalTerm,
+  Problem,
+  QuestionStage,
+  QuestionType,
+  QuizQuestion,
+  TeachingContext,
+  VisualizationFrame,
+} from '../../types'
+import { beginnerPatternProfiles, type BeginnerPatternProfile } from './beginnerProfiles'
 import { DEEP_PROBLEM_IDS, problemTeachingFacts } from './problemFacts'
 import { patternProfiles, type PatternProfile } from './patterns'
 
-interface Choice {
-  text: string
-  correct: boolean
-  feedback: string
-}
+interface Choice { text: string; correct: boolean; feedback: string }
+interface Guidance { teachingContext: TeachingContext; formalTerm: FormalTerm }
+type BeginnerField = keyof BeginnerPatternProfile
 
 const hash = (value: string) => [...value].reduce((total, character) => ((total * 31) + character.charCodeAt(0)) >>> 0, 2166136261)
 
@@ -21,6 +29,28 @@ const shuffled = <T>(items: T[], seed: string) => {
   return copy
 }
 
+const guidance = (title: string, body: string, name: string, definition: string): Guidance => ({
+  teachingContext: { title, body },
+  formalTerm: { name, definition },
+})
+
+const wrongFeedback: Record<QuestionStage, string> = {
+  contract: 'This result does not match what the example asks the function to produce. Compare the input with the requested output.',
+  'data-structure': 'This remembers different information from what the solution will need later. Ask what must still be available after one step.',
+  pattern: 'This approach does not naturally use the information you just chose. Match the strategy to what must be remembered.',
+  invariant: 'This statement can become false during the solution. Look for the one promise that should survive every completed step.',
+  visualization: 'This update does not both make progress and preserve the information already built. Follow one item through the frames.',
+  'build-algorithm': 'This step is not ready yet or belongs to another approach. Check what information must exist before it can run.',
+  transition: 'This action loses needed information or does not make useful progress. Apply it once to the example and inspect the result.',
+  trace: 'This result does not follow from the example. Work through one input item or graph step at a time.',
+  correctness: 'This reason leaves a valid case uncovered or allows an invalid case. Connect the repeated step to the final result.',
+  bottleneck: 'This is not the work the faster solution avoids. Find the search or calculation repeated for many inputs.',
+  'edge-case': 'This case matters less to this implementation. Test the boundary most likely to violate its stored information or update rule.',
+  'time-complexity': 'This growth rate does not match how often the solution processes its input. Count the visits and costly operations again.',
+  'space-complexity': 'This does not match the largest extra structure kept at one time. Count maps, queues, stacks, tables, and active calls.',
+  tradeoff: 'This comparison does not describe what this solution gains and pays for. Compare it with the simplest nearby alternative.',
+}
+
 const question = (
   problem: Problem,
   stage: QuestionStage,
@@ -30,18 +60,15 @@ const question = (
   distractors: string[],
   explanation: string,
   hint: string,
+  learnerGuidance: Guidance,
 ): QuizQuestion => {
   const choices = shuffled<Choice>([
     { text: correctText, correct: true, feedback: explanation },
-    ...distractors.map((text) => ({
-      text,
-      correct: false,
-      feedback: `“${text}” describes a different strategy or proof obligation. It does not match the structure required at this problem’s ${stage.replaceAll('-', ' ')} stage; re-check which state must remain valid after each step.`,
-    })),
+    ...distractors.map((text) => ({ text, correct: false, feedback: wrongFeedback[stage] })),
   ], `${problem.id}:${stage}`)
 
   return {
-    id: `${problem.id}:static-v1:${stage}`,
+    id: `${problem.id}:static-v3:${stage}`,
     type,
     format: 'multiple-choice',
     stage,
@@ -50,91 +77,93 @@ const question = (
     answer: choices.findIndex(({ correct }) => correct),
     explanation,
     hint,
+    ...learnerGuidance,
     optionFeedback: choices.map(({ feedback }) => feedback),
   }
 }
 
+const profileChoices = (profile: PatternProfile, field: BeginnerField) =>
+  profile.distractors.map((id) => beginnerPatternProfiles[id][field])
+
 const visualizationQuestion = (
   problem: Problem,
   profile: PatternProfile,
-  contractText: string,
+  beginner: BeginnerPatternProfile,
   input: string,
   output: string,
 ): QuizQuestion => {
   const base = question(
-    problem,
-    'visualization',
-    'Algorithm',
-    `Walk through how the verified ${profile.title} solution changes its state. Which update belongs in the repeated iteration?`,
-    profile.transition,
-    profileChoices(profile, 'transition'),
-    `Each iteration applies this transition while preserving the stated invariant: ${profile.invariant}`,
-    'Move through the frames in order. The correct update must consume new work and leave the invariant true.',
+    problem, 'visualization', 'Algorithm',
+    'Walk through the example. Which action should repeat at each step?',
+    beginner.step, profileChoices(profile, 'step'),
+    `Repeat this action while keeping the same promise true: ${beginner.promise}`,
+    'The right action must use the current item and leave the stored information ready for the next one.',
+    guidance('Watch the information change', 'Move through the frames slowly. At each frame, notice what changed and what stayed true.', 'Iteration', 'One repeated pass through a step of an algorithm.'),
   )
   const frames: VisualizationFrame[] = [
     {
-      id: 'input', phase: 'Before iteration 1', title: 'Read the concrete case',
-      action: 'Identify the input, required output, and the part of the input that can change the maintained state.',
-      state: [{ label: 'Example input', value: input }, { label: 'Contract', value: contractText }],
-      invariant: 'No input has been processed yet, so the maintained state has not made any claims.',
+      id: 'input', phase: 'Start', title: 'Read the example',
+      action: 'Identify the given input and the result the function must produce.',
+      state: [{ label: 'Input', value: input }, { label: 'Goal', value: output }],
+      invariant: 'No work has been processed yet.',
     },
     {
-      id: 'initialize', phase: 'Initialization', title: 'Create only the state the algorithm needs',
-      action: profile.state,
-      state: [{ label: 'Maintained state', value: profile.state }, { label: 'Processed region', value: 'Empty' }],
-      invariant: 'The state correctly summarizes the empty processed region.',
+      id: 'initialize', phase: 'Set up', title: 'Create what the solution needs to remember',
+      action: beginner.memory,
+      state: [{ label: 'Memory', value: beginner.memory }, { label: 'Progress', value: 'Nothing processed yet' }],
+      invariant: 'The starting state correctly represents no completed work.',
     },
     {
-      id: 'first-update', phase: 'Iteration 1', title: 'Consume the first eligible unit of work',
-      action: profile.transition,
-      state: [{ label: 'Update rule', value: profile.transition }, { label: 'Progress', value: 'One eligible item, node, edge, state, or decision has been processed.' }],
-      invariant: profile.invariant,
+      id: 'first-update', phase: 'First step', title: 'Process one piece of work',
+      action: beginner.step,
+      state: [{ label: 'Action', value: beginner.step }, { label: 'Progress', value: 'One item, node, edge, or choice is handled' }],
+      invariant: beginner.promise,
     },
     {
-      id: 'repeat', phase: 'Iterations 2…n', title: 'Repeat without undoing proven work',
-      action: 'Apply the same transition to the next eligible unit or branch. Preserve the invariant when advancing, combining results, or backtracking.',
-      state: [{ label: 'What changes', value: 'The state named by the transition and any newly finalized output or processed-region boundary.' }, { label: 'What stays true', value: profile.invariant }],
-      invariant: profile.invariant,
+      id: 'repeat', phase: 'Repeat', title: 'Use the same safe step again',
+      action: beginner.step,
+      state: [{ label: 'What changes', value: 'The stored information and the amount of completed work' }, { label: 'What stays true', value: beginner.promise }],
+      invariant: beginner.promise,
     },
     {
-      id: 'finish', phase: 'Termination', title: 'Read the answer from final state',
-      action: profile.correctness,
-      state: [{ label: 'Example output', value: output }, { label: 'Why no work remains', value: profile.correctness }],
-      invariant: 'Every required input unit or reachable state has been resolved, so the final answer follows from the maintained invariant.',
+      id: 'finish', phase: 'Finish', title: 'Read the answer from the final state',
+      action: beginner.why,
+      state: [{ label: 'Output', value: output }, { label: 'Why it works', value: beginner.why }],
+      invariant: 'All required work is complete, so the final state gives the requested result.',
     },
   ]
-  return { ...base, id: `${problem.id}:static-v2:visualization`, format: 'iteration-visualization', visualization: { input, frames } }
+  return { ...base, id: `${problem.id}:static-v3:visualization`, format: 'iteration-visualization', visualization: { input, frames } }
 }
 
-const algorithmBuilderQuestion = (problem: Problem, profile: PatternProfile): QuizQuestion => {
+const algorithmBuilderQuestion = (problem: Problem, profile: PatternProfile, beginner: BeginnerPatternProfile): QuizQuestion => {
   const correctSteps: AlgorithmBuildStep[] = [
-    { id: 'initialize', text: `Initialize the state: ${profile.state}`, reason: 'The update rule cannot run until all state named by the invariant exists.' },
-    { id: 'control', text: `Continue while eligible work remains, using this invariant as the loop or recursion contract: ${profile.invariant}`, reason: 'The control phase identifies valid remaining work and states what must be preserved before and after it.' },
-    { id: 'iterate', text: `Repeat the transition: ${profile.transition}`, reason: 'This consumes new work while preserving the invariant.' },
-    { id: 'finish', text: `Terminate and justify the result: ${profile.correctness}`, reason: 'Once no work remains, correctness connects the final invariant to the requested answer.' },
+    { id: 'initialize', text: `Set up: ${beginner.memory}`, reason: 'The solution needs this information before it can process anything.' },
+    { id: 'control', text: 'Continue while there is unfinished work.', reason: 'The solution must know whether another item, node, edge, or choice remains.' },
+    { id: 'iterate', text: `For one step: ${beginner.step}`, reason: 'This handles new work without losing what earlier steps established.' },
+    { id: 'finish', text: `Finish: ${beginner.why}`, reason: 'When no work remains, the stored information now gives the requested result.' },
   ]
   const decoys: AlgorithmBuildStep[] = [
-    { id: 'decoy-state', text: `Initialize unrelated state: ${patternProfiles[profile.distractors[0]].state}`, reason: 'This state belongs to a different algorithmic pattern.' },
-    { id: 'decoy-transition', text: `Use a different update: ${patternProfiles[profile.distractors[1]].transition}`, reason: 'This transition does not preserve this problem’s invariant.' },
+    { id: 'decoy-state', text: `Set up: ${beginnerPatternProfiles[profile.distractors[0]].memory}`, reason: 'This information supports a different approach.' },
+    { id: 'decoy-transition', text: `For one step: ${beginnerPatternProfiles[profile.distractors[1]].step}`, reason: 'This action belongs to a different approach.' },
   ]
   const steps = shuffled([...correctSteps, ...decoys], `${problem.id}:build-algorithm`)
   return {
-    id: `${problem.id}:static-v2:build-algorithm`,
+    id: `${problem.id}:static-v3:build-algorithm`,
     type: 'Algorithm',
     format: 'algorithm-builder',
     stage: 'build-algorithm',
-    prompt: `Build the verified ${profile.title} algorithm by placing its four executable phases in dependency order.`,
+    prompt: 'Put the four parts of the solution in the order they must happen.',
     options: steps.map(({ text }) => text),
     answer: 0,
-    explanation: 'Initialization creates the state, the invariant defines its meaning, the transition preserves that meaning while making progress, and termination connects final state to the answer.',
-    hint: 'Start with the state required by the invariant. The repeating transition cannot come before that state and meaning exist.',
-    optionFeedback: steps.map(({ id }) => id.startsWith('decoy') ? 'This step belongs to a different strategy. Re-check which state and invariant were established for this problem.' : 'This is a required phase; reconsider where its prerequisites are satisfied.'),
+    explanation: 'First create the needed information. Then repeat the safe update while work remains. Finally, use the completed state as the answer.',
+    hint: 'Start with the information the first real step needs. Finish only after every required piece of work is handled.',
+    ...guidance('Build before seeing code', 'A complete algorithm needs a setup, a stopping rule, a repeated action, and a way to produce the answer.', 'Algorithm structure', 'The ordered parts that initialize, repeat, and finish a solution.'),
+    optionFeedback: steps.map(({ id }) => id.startsWith('decoy')
+      ? 'This step belongs to a different strategy. Use the information and action established for this problem.'
+      : 'This step is needed, but something it depends on may need to happen first.'),
     builder: { steps, correctOrder: correctSteps.map(({ id }) => id) },
   }
 }
-
-const profileChoices = (profile: PatternProfile, field: keyof Pick<PatternProfile, 'recognition' | 'state' | 'invariant' | 'transition' | 'correctness' | 'bottleneck' | 'edgeCase' | 'tradeoff'>) =>
-  profile.distractors.map((id) => patternProfiles[id][field])
 
 const complexityDistractors = (correct: string, kind: 'time' | 'space') => {
   const candidates = kind === 'time'
@@ -145,36 +174,112 @@ const complexityDistractors = (correct: string, kind: 'time' | 'space') => {
 
 const distinctAlternatives = (correct: string, values: string[]) => {
   const unique = [...new Set(values.map((value) => value.trim()).filter((value) => value && value !== correct))]
-  const fallback = ['No result is returned.', 'The input is returned unchanged.', 'Only the input length is returned.']
+  const fallback = ['No value is returned.', 'The input is returned unchanged.', 'Only the input length is returned.']
   return [...unique, ...fallback.filter((value) => value !== correct && !unique.includes(value))].slice(0, 3)
 }
 
 export const compileQuestionPath = (problem: Problem, allProblems: Problem[]): QuizQuestion[] => {
   const fact = problemTeachingFacts[problem.id]
   if (!fact) throw new Error(`Missing verified teaching fact for problem ${problem.id}`)
+
   const profile = { ...patternProfiles[fact.pattern], ...fact.teaching }
+  const beginner = { ...beginnerPatternProfiles[fact.pattern], ...fact.beginner }
   const time = fact.time ?? { value: profile.time, reason: profile.timeReason }
   const space = fact.space ?? { value: profile.space, reason: profile.spaceReason }
-  const contractText = problem.description.split(/\n\s*\n|\n/)[0].trim()
-  const descriptionChoices = distinctAlternatives(contractText, allProblems.filter((candidate) => candidate.id !== problem.id).map((candidate) => candidate.description.split(/\n\s*\n|\n/)[0].trim()))
   const example = problem.examples[0]
-  const outputChoices = distinctAlternatives(example?.output ?? 'The required result', allProblems.flatMap((candidate) => candidate.examples.map(({ output }) => output)))
+  const correctOutput = example?.output ?? 'The required result'
+  const outputChoices = distinctAlternatives(correctOutput, allProblems.flatMap((candidate) => candidate.examples.map(({ output }) => output)))
 
   const stages: Record<QuestionStage, QuizQuestion> = {
-    contract: question(problem, 'contract', 'Comprehension', `Which statement is the actual contract for ${problem.title}?`, contractText, descriptionChoices, 'This is the exact required task; a valid algorithm must also satisfy the remaining qualifications in the full statement.', 'Separate what the function must return from examples of how it may be computed.'),
-    bottleneck: question(problem, 'bottleneck', 'Pattern', 'What makes the straightforward approach unnecessarily expensive or unreliable?', profile.bottleneck, profileChoices(profile, 'bottleneck'), profile.bottleneck, 'Identify the work that would be repeated by a direct enumeration or rescan.'),
-    pattern: question(problem, 'pattern', 'Pattern', `Which recognition signal most directly supports the verified ${profile.title} solution taught here?`, profile.recognition, profileChoices(profile, 'recognition'), `This signal justifies using ${profile.title}.`, 'Look for the structural property that the algorithm exploits, not merely a topic label.'),
-    'data-structure': question(problem, 'data-structure', 'Data Structure', 'Before choosing an algorithm, which data structure or minimal maintained state is necessary to support an optimal solution?', profile.state, profileChoices(profile, 'state'), profile.state, 'Identify what must be stored or directly accessible before considering how the algorithm updates it. Some optimal solutions need only scalar variables rather than another collection.'),
-    invariant: question(problem, 'invariant', 'Invariant', 'Which invariant must be true after every completed step?', profile.invariant, profileChoices(profile, 'invariant'), profile.invariant, 'Phrase the invariant as a claim about all work already processed.'),
-    visualization: visualizationQuestion(problem, profile, contractText, example?.input ?? 'the provided input', example?.output ?? 'the required result'),
-    'build-algorithm': algorithmBuilderQuestion(problem, profile),
-    transition: question(problem, 'transition', 'Algorithm', 'Which transition advances the algorithm while preserving that invariant?', profile.transition, profileChoices(profile, 'transition'), profile.transition, 'The next step must make progress without invalidating the maintained state.'),
-    trace: question(problem, 'trace', 'Algorithm', `Run the verified algorithm on this example: ${example?.input ?? 'the provided input'}. What result must the trace produce?`, example?.output ?? 'The required result', outputChoices, example?.explanation || `The trace must terminate at the documented output: ${example?.output}.`, 'Follow the maintained state one input element or graph step at a time; do not skip directly to a different example.'),
-    correctness: question(problem, 'correctness', 'Correctness', 'Why does the verified algorithm cover all valid answers without accepting an invalid one?', profile.correctness, profileChoices(profile, 'correctness'), profile.correctness, 'Connect the invariant and transition to an exhaustive set of valid cases.'),
-    'edge-case': question(problem, 'edge-case', 'Correctness', 'Which edge case is especially important for this implementation?', profile.edgeCase, profileChoices(profile, 'edgeCase'), profile.edgeCase, 'Test the boundary where the maintained state is empty, duplicated, or at its smallest legal size.'),
-    'time-complexity': question(problem, 'time-complexity', 'Complexity', 'What is the time complexity of the verified solution?', time.value, complexityDistractors(time.value, 'time'), time.reason, 'Count how often each input item, node, edge, state, or heap entry can be processed.'),
-    'space-complexity': question(problem, 'space-complexity', 'Complexity', 'What is the auxiliary space complexity of the verified solution?', space.value, complexityDistractors(space.value, 'space'), space.reason, 'Count retained state and the maximum recursion, queue, stack, map, or table size; exclude the returned output unless stated otherwise.'),
-    tradeoff: question(problem, 'tradeoff', 'Complexity', 'Which tradeoff accurately characterizes this approach?', profile.tradeoff, profileChoices(profile, 'tradeoff'), profile.tradeoff, 'Compare this approach with the nearest plausible alternative and identify what resource or capability changes.'),
+    contract: question(
+      problem, 'contract', 'Comprehension',
+      'Look at the example. Which output matches what the problem asks us to produce?',
+      correctOutput, outputChoices,
+      `The example produces ${correctOutput}.`,
+      'Focus only on the requested result. You do not need to know the algorithm yet.',
+      guidance('Start with the result', 'First understand the input and required output. Ignore how to compute it for now.', 'Problem contract', 'The exact input, required output, and rules a valid solution must follow.'),
+    ),
+    'data-structure': question(
+      problem, 'data-structure', 'Data Structure',
+      'What information should the solution keep while it works?',
+      beginner.memory, profileChoices(profile, 'memory'), beginner.memory,
+      'Ask what one step will need from earlier work. Some solutions need only a few variables.',
+      guidance('Decide what must be remembered', 'A data structure organizes information so later steps can find or update it. Sometimes a few variables are enough.', 'Maintained state', 'The information an algorithm keeps while it processes the input.'),
+    ),
+    pattern: question(
+      problem, 'pattern', 'Pattern',
+      'Which approach best uses the information you just chose?',
+      beginner.clue, profileChoices(profile, 'clue'),
+      `This clue points to ${profile.title}: ${beginner.clue}`,
+      'Match the approach to the information that must be looked up, updated, or moved.',
+      guidance('Turn memory into a strategy', 'Now choose a repeatable approach that naturally uses the information from the previous question.', profile.title, beginner.clue),
+    ),
+    invariant: question(
+      problem, 'invariant', 'Invariant',
+      'What must stay true after every completed step?',
+      beginner.promise, profileChoices(profile, 'promise'), beginner.promise,
+      'Imagine pausing after one step. Which statement should still be completely true?',
+      guidance('Find the promise', 'A reliable solution keeps one important promise true as it makes progress.', 'Invariant', 'A statement that remains true before and after every repeated step.'),
+    ),
+    visualization: visualizationQuestion(problem, profile, beginner, example?.input ?? 'the provided input', correctOutput),
+    bottleneck: question(
+      problem, 'bottleneck', 'Pattern',
+      'What work does the faster solution avoid repeating?',
+      beginner.repeatedWork, profileChoices(profile, 'repeatedWork'), beginner.repeatedWork,
+      'Find the search, comparison, or calculation a basic solution performs again and again.',
+      guidance('Find the repeated work', 'Faster solutions often store or reuse a result instead of calculating the same thing again.', 'Bottleneck', 'The part of a solution that contributes most to its running time or memory use.'),
+    ),
+    'build-algorithm': algorithmBuilderQuestion(problem, profile, beginner),
+    transition: question(
+      problem, 'transition', 'Algorithm',
+      'What should the solution do with one new piece of work?',
+      beginner.step, profileChoices(profile, 'step'), beginner.step,
+      'Apply the action once. It should make progress and keep the earlier promise true.',
+      guidance('Choose one safe step', 'The repeated action should handle new work without destroying correct information from earlier work.', 'State transition', 'The rule that changes an algorithm from one valid state to the next.'),
+    ),
+    trace: question(
+      problem, 'trace', 'Algorithm',
+      `What result should the algorithm produce for ${example?.input ?? 'the example input'}?`,
+      correctOutput, outputChoices,
+      example?.explanation ?? `Following the steps produces ${correctOutput}.`,
+      'Write down the stored information after each step instead of jumping to the end.',
+      guidance('Test the steps on an example', 'A small example reveals whether each update uses the right information and still makes progress.', 'Dry run', 'A manual, step-by-step execution of an algorithm on a specific input.'),
+    ),
+    correctness: question(
+      problem, 'correctness', 'Correctness',
+      'Why can we trust the final answer?',
+      beginner.why, profileChoices(profile, 'why'), beginner.why,
+      'Connect the promise kept after every step to the moment when no work remains.',
+      guidance('Connect the steps to the answer', 'A solution is correct when its repeated step handles every required case and its final state means the requested answer.', 'Correctness argument', 'A clear reason the algorithm returns the right result for every valid input.'),
+    ),
+    'edge-case': question(
+      problem, 'edge-case', 'Correctness',
+      'Which input is most likely to break a careless version of this solution?',
+      beginner.watchOut, profileChoices(profile, 'watchOut'), beginner.watchOut,
+      'Test the smallest input, repeated values, empty state, and the point where boundaries change.',
+      guidance('Stress the fragile step', 'Edge cases are small or unusual inputs that challenge an assumption in the setup or repeated action.', 'Edge case', 'A valid input near a boundary or unusual condition that needs special attention.'),
+    ),
+    'time-complexity': question(
+      problem, 'time-complexity', 'Complexity',
+      'How does the amount of work grow as the input grows?',
+      time.value, complexityDistractors(time.value, 'time'), time.reason,
+      'Count how many times each item can be visited, then include sorting or priority-queue work.',
+      guidance('Count the work', 'Focus on how often input items, nodes, edges, or table states are processed as the input grows.', 'Time complexity', 'A description of how an algorithm\'s work grows with the size of its input.'),
+    ),
+    'space-complexity': question(
+      problem, 'space-complexity', 'Complexity',
+      'How much extra memory does the solution need?',
+      space.value, complexityDistractors(space.value, 'space'), space.reason,
+      'Count the largest map, queue, stack, table, and active call path kept at one time.',
+      guidance('Count extra memory', 'Count memory created by the solution. Do not count the input or returned output unless the problem says to.', 'Auxiliary space', 'The extra memory an algorithm uses beyond its input and required output.'),
+    ),
+    tradeoff: question(
+      problem, 'tradeoff', 'Complexity',
+      'What does this approach gain, and what does it give up?',
+      beginner.tradeoff, profileChoices(profile, 'tradeoff'), beginner.tradeoff,
+      'Compare its running time, memory, input changes, and implementation difficulty with a simpler approach.',
+      guidance('Compare the cost', 'An optimization usually improves one property by spending another resource or adding a requirement.', 'Trade-off', 'A choice that improves one property while accepting a cost or limitation elsewhere.'),
+    ),
   }
 
   const baseline: QuestionStage[] = ['contract', 'data-structure', 'pattern', 'invariant', 'visualization', 'build-algorithm', 'transition', 'correctness', 'time-complexity', 'space-complexity']

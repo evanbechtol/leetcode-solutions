@@ -19,6 +19,8 @@ describe('deterministic coaching catalog', () => {
       expect(problem.questions[2].stage).toBe('pattern')
       expect(problem.questions[4].format).toBe('iteration-visualization')
       expect(hasDataStructureGateBeforeAlgorithms(problem.questions)).toBe(true)
+      expect(problem.questions.every(({ teachingContext, formalTerm }) => teachingContext && formalTerm)).toBe(true)
+      expect(problem.questions.every(({ prompt }) => prompt.trim().split(/\s+/).length <= 24)).toBe(true)
       expect(problem.questions.filter(({ format }) => format === 'algorithm-builder')).toHaveLength(1)
       expect(problem.questions.filter(({ format }) => format === 'iteration-visualization')).toHaveLength(1)
     }
