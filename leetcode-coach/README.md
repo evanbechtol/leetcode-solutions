@@ -50,7 +50,9 @@ Then configure the repository's Pages source to the `gh-pages` branch. Progress 
 
 The app combines five hand-authored problem records in `src/data/problems.ts` with a generated foundations catalog in `src/data/catalog.generated.json`. Hand-authored records take precedence when IDs overlap, producing 136 merged problems. A typed deterministic compiler builds every coaching path from reviewed pattern profiles and problem-specific teaching facts.
 
-Standard paths contain ten questions and deep representative paths contain thirteen. They progress from contract comprehension through pattern, state, invariant, iteration visualization, algorithm construction, correctness, and complexity. All paths work without AI.
+Standard paths contain ten questions and deep representative paths contain thirteen. They progress from contract comprehension to data-structure identification before introducing the algorithmic pattern, invariant, iteration visualization, algorithm construction, correctness, and complexity. Problem topic tags remain hidden until the learner completes the data-structure checkpoint. All paths work without AI.
+
+Each problem has a bookmarkable hash route in the form `#/problems/{id}`. For example, `#/problems/1` opens Two Sum directly and remains compatible with GitHub Pages hosting.
 
 Topic mastery is calculated from the loaded catalog: a track reaches 100% only when every problem carrying that core topic has been completed.
 

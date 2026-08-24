@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { problems } from '../data/problems'
 import type { AnswerRecord, Filters, ProblemResult, QuestionFormat, QuestionType, QuizQuestion } from '../types'
 import { drawRandomProblem } from '../utils/randomSelection'
+import { hasDataStructureGateBeforeAlgorithms, sequenceDataStructureBeforeAlgorithms } from '../utils/questionSequence'
 
 const STORAGE_KEY = 'pathfinder-progress-v1'
 const QUIZ_CACHE_KEY = 'pathfinder-generated-quizzes-v1'
@@ -105,18 +106,9 @@ export const useTrainerStore = defineStore('trainer', () => {
   }, { deep: true })
   watch(quizCache, () => localStorage.setItem(QUIZ_CACHE_KEY, JSON.stringify(quizCache.value)), { deep: true })
 
-  function startRandomProblem() {
-    if (!matchingProblems.value.length) return false
-    const eligibleIds = matchingProblems.value.map(({ id }) => id)
-    const nextPoolKey = [...eligibleIds].sort((left, right) => left - right).join(',')
-    if (nextPoolKey !== problemPoolKey) {
-      problemQueue = []
-      problemPoolKey = nextPoolKey
-    }
-    const draw = drawRandomProblem(eligibleIds, currentProblemId.value, problemQueue)
-    if (draw.selectedId === null) return false
-    problemQueue = draw.remainingQueue
-    const selected = matchingProblems.value.find(({ id }) => id === draw.selectedId)!
+  function initializeProblem(problemId: number) {
+    const selected = availableProblems.value.find((problem) => problem.id === problemId)
+    if (!selected) return false
     currentProblemId.value = selected.id
     activeQuestions.value = selected.questions.length ? selected.questions : (quizCache.value[selected.id] || [])
     currentQuestionIndex.value = 0
@@ -128,10 +120,46 @@ export const useTrainerStore = defineStore('trainer', () => {
     return true
   }
 
+  function pickRandomProblemId() {
+    if (!matchingProblems.value.length) return null
+    const eligibleIds = matchingProblems.value.map(({ id }) => id)
+    const nextPoolKey = [...eligibleIds].sort((left, right) => left - right).join(',')
+    if (nextPoolKey !== problemPoolKey) {
+      problemQueue = []
+      problemPoolKey = nextPoolKey
+    }
+    const draw = drawRandomProblem(eligibleIds, currentProblemId.value, problemQueue)
+    if (draw.selectedId === null) return null
+    problemQueue = draw.remainingQueue
+    return draw.selectedId
+  }
+
+  function startProblem(problemId: number) {
+    return initializeProblem(problemId)
+  }
+
+  function startRandomProblem() {
+    const problemId = pickRandomProblemId()
+    return problemId === null ? false : initializeProblem(problemId)
+  }
+
+  function clearCurrentProblem() {
+    currentProblemId.value = null
+    activeQuestions.value = []
+    currentQuestionIndex.value = 0
+    selectedAnswer.value = null
+    submitted.value = false
+    answerCorrect.value = null
+    firstTryCorrect.value = 0
+    attemptedCurrent.value = new Set()
+  }
+
   function setGeneratedQuestions(questions: QuizQuestion[]) {
     if (!currentProblem.value || questions.length !== 5) return false
-    activeQuestions.value = questions
-    quizCache.value[currentProblem.value.id] = questions
+    const sequencedQuestions = sequenceDataStructureBeforeAlgorithms(questions)
+    if (!hasDataStructureGateBeforeAlgorithms(sequencedQuestions)) return false
+    activeQuestions.value = sequencedQuestions
+    quizCache.value[currentProblem.value.id] = sequencedQuestions
     return true
   }
 
@@ -200,7 +228,7 @@ export const useTrainerStore = defineStore('trainer', () => {
   return {
     answers, results, streak, bestStreak, currentProblemId, currentQuestionIndex, selectedAnswer, submitted, answerCorrect,
     firstTryCorrect, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
-    totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, topicMastery, aiCoachEnabled, catalogSize: problems.length, startRandomProblem,
-    setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, tryAgain, nextQuestion, resetProgress,
+    totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, topicMastery, aiCoachEnabled, catalogSize: problems.length, startProblem,
+    pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, tryAgain, nextQuestion, resetProgress,
   }
 })

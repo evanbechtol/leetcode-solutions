@@ -19,8 +19,8 @@ This document is the planning source of truth for Pathfinder. It describes the c
 Pathfinder should teach users how to derive an optimal solution, not merely recognize a memorized answer. A successful practice path should help a user:
 
 1. Interpret the problem contract and constraints.
-2. Recognize relevant structural signals.
-3. Select the appropriate data structure and algorithmic pattern.
+2. Identify the necessary data structure or minimal maintained state.
+3. Recognize the appropriate algorithmic pattern using the established state and structural signals.
 4. Define the maintained state and invariant.
 5. Follow how that state changes during execution.
 6. Construct the algorithm in dependency order.
@@ -40,7 +40,7 @@ Pathfinder should teach users how to derive an optimal solution, not merely reco
 ### Derivation before memorization
 
 - Questions should follow the dependency order of the reasoning process.
-- Recognition should lead to state, state to invariant, invariant to transition, and transition to proof and complexity.
+- Contract comprehension should lead to data-structure identification before a specific algorithm is named or implemented. State should then lead to pattern, invariant, transition, proof, and complexity.
 - Repeated practice should ask the learner to produce more of the reasoning rather than only recognize it.
 
 ### Deterministic core, optional AI
@@ -87,6 +87,8 @@ Pathfinder should teach users how to derive an optimal solution, not merely reco
 #### Decision question
 
 The learner selects one of four answers. Distractors represent identifiable misconceptions and receive option-specific feedback.
+
+Every path places the data-structure decision immediately after contract comprehension and before pattern or implementation questions. Topic tags stay hidden until this checkpoint is answered correctly.
 
 #### Build the algorithm
 

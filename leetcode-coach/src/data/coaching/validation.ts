@@ -2,6 +2,7 @@ import type { Problem } from '../../types'
 import { compileQuestionPath } from './compiler'
 import { DEEP_PROBLEM_IDS, problemTeachingFacts } from './problemFacts'
 import { patternProfiles, rawTagPatternMap } from './patterns'
+import { hasDataStructureGateBeforeAlgorithms } from '../../utils/questionSequence'
 
 export const validateCoachingContent = (problems: Problem[]) => {
   const errors: string[] = []
@@ -23,6 +24,7 @@ export const validateCoachingContent = (problems: Problem[]) => {
     if (formats.filter((format) => format === 'algorithm-builder').length !== 1) errors.push(`${problem.id}: expected one algorithm builder.`)
     if (formats.filter((format) => format === 'iteration-visualization').length !== 1) errors.push(`${problem.id}: expected one iteration visualization.`)
     if (formats[4] !== 'iteration-visualization') errors.push(`${problem.id}: iteration visualization must be question five.`)
+    if (!hasDataStructureGateBeforeAlgorithms(path)) errors.push(`${problem.id}: data-structure identification must precede every algorithm-dependent question.`)
     path.forEach((question) => {
       const format = question.format ?? 'multiple-choice'
       if (format === 'algorithm-builder') {

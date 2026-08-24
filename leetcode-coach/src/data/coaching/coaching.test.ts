@@ -3,6 +3,7 @@ import { problems } from '../problems'
 import { compileQuestionPath } from './compiler'
 import { DEEP_PROBLEM_IDS, problemTeachingFacts } from './problemFacts'
 import { validateCoachingContent } from './validation'
+import { hasDataStructureGateBeforeAlgorithms } from '../../utils/questionSequence'
 
 describe('deterministic coaching catalog', () => {
   it('covers all 134 dataset problems plus two curated-only problems', () => {
@@ -13,7 +14,11 @@ describe('deterministic coaching catalog', () => {
   it('builds ten baseline stages and thirteen deep stages', () => {
     for (const problem of problems) {
       expect(problem.questions).toHaveLength(DEEP_PROBLEM_IDS.has(problem.id) ? 13 : 10)
+      expect(problem.questions[0].stage).toBe('contract')
+      expect(problem.questions[1].stage).toBe('data-structure')
+      expect(problem.questions[2].stage).toBe('pattern')
       expect(problem.questions[4].format).toBe('iteration-visualization')
+      expect(hasDataStructureGateBeforeAlgorithms(problem.questions)).toBe(true)
       expect(problem.questions.filter(({ format }) => format === 'algorithm-builder')).toHaveLength(1)
       expect(problem.questions.filter(({ format }) => format === 'iteration-visualization')).toHaveLength(1)
     }

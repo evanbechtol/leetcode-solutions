@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import hljs from 'highlight.js/lib/core'
 import typescript from 'highlight.js/lib/languages/typescript'
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -13,6 +14,7 @@ import FilterPanel from '../components/FilterPanel.vue'
 import AlgorithmBuilderQuestion from '../components/questions/AlgorithmBuilderQuestion.vue'
 import IterationVisualizationQuestion from '../components/questions/IterationVisualizationQuestion.vue'
 import { incorrectFeedbackFor, shouldRevealCorrectChoice } from '../utils/quizFeedback'
+import { parseProblemRouteId, problemRoutePath } from '../utils/problemRoutes'
 
 hljs.registerLanguage('typescript', typescript)
 hljs.registerLanguage('javascript', javascript)
@@ -22,6 +24,8 @@ hljs.registerLanguage('cpp', cpp)
 hljs.registerLanguage('rust', rust)
 
 const store = useTrainerStore()
+const route = useRoute()
+const router = useRouter()
 const filterOpen = ref(false)
 const sessionComplete = ref(false)
 const copied = ref(false)
@@ -36,10 +40,17 @@ const interactionResponse = ref({ ready: false, correct: false, feedback: '' })
 const { preferredLanguage, setPreferredLanguage } = useCodeLanguagePreference()
 
 const progress = computed(() => store.currentProblem
-  ? ((store.currentQuestionIndex + (store.submitted && store.selectedAnswer === store.currentQuestion?.answer ? 1 : 0)) / Math.max(store.questionCount, 1)) * 100
+  ? ((store.currentQuestionIndex + (store.submitted && store.answerCorrect ? 1 : 0)) / Math.max(store.questionCount, 1)) * 100
   : 0)
 const activeFilterCount = computed(() => Object.values(store.filters).reduce((sum, values) => sum + values.length, 0))
 const currentFormat = computed(() => store.currentQuestion?.format ?? 'multiple-choice')
+const dataStructureQuestionIndex = computed(() => store.activeQuestions.findIndex((question) => question.stage === 'data-structure' || question.type === 'Data Structure'))
+const hasIdentifiedDataStructure = computed(() => {
+  const index = dataStructureQuestionIndex.value
+  if (index < 0) return false
+  return store.currentQuestionIndex > index
+    || (store.currentQuestionIndex === index && store.submitted && store.answerCorrect === true)
+})
 const isMultipleChoice = computed(() => currentFormat.value === 'multiple-choice')
 const isCorrect = computed(() => store.submitted && store.answerCorrect === true)
 const revealCorrectChoice = computed(() => shouldRevealCorrectChoice(store.submitted, isCorrect.value))
@@ -99,12 +110,34 @@ async function start() {
   aiHint.value = ''
   quizError.value = ''
   resetInteraction()
-  if (!store.startRandomProblem()) return
+  const problemId = store.pickRandomProblemId()
+  if (problemId === null) return
+  await router.push(problemRoutePath(problemId))
+}
+
+watch(() => route.params.problemId, async (routeValue) => {
+  if (routeValue === undefined) {
+    store.clearCurrentProblem()
+    sessionComplete.value = false
+    document.title = 'Pathfinder — LeetCode Coach'
+    return
+  }
+
+  const problemId = parseProblemRouteId(routeValue)
+  if (problemId === null || !store.startProblem(problemId)) {
+    await router.replace({ name: 'practice' })
+    return
+  }
+
+  sessionComplete.value = false
+  aiHint.value = ''
+  quizError.value = ''
+  resetInteraction()
+  document.title = `${store.currentProblem?.title} | Pathfinder`
   await nextTick()
   scrollPageToTop()
-  if (store.questionCount) return
-  await generateQuiz()
-}
+  if (!store.questionCount) await generateQuiz()
+}, { immediate: true })
 
 async function generateQuiz() {
   if (!store.currentProblem) return
@@ -237,14 +270,17 @@ async function copySolution() {
     <div v-else class="quiz-layout app-shell px-5 px-md-8 py-7 py-md-10">
       <aside class="problem-panel">
         <div class="d-flex align-center justify-space-between mb-6">
-          <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" @click="store.currentProblemId = null">Problem picker</v-btn>
+          <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" :to="{ name: 'practice' }">Problem picker</v-btn>
           <v-btn icon="mdi-tune-variant" variant="text" size="small" aria-label="Filters" @click="filterOpen = true" />
         </div>
         <div class="problem-number">LEETCODE / {{ String(store.currentProblem.id).padStart(4, '0') }}</div>
         <h2 class="problem-title">{{ store.currentProblem.title }}</h2>
         <div class="d-flex flex-wrap ga-2 my-4">
           <v-chip size="small" :class="`difficulty-${store.currentProblem.difficulty.toLowerCase()}`">{{ store.currentProblem.difficulty }}</v-chip>
-          <v-chip v-for="topic in store.currentProblem.topics" :key="topic" size="small" variant="outlined">{{ topic }}</v-chip>
+          <template v-if="hasIdentifiedDataStructure">
+            <v-chip v-for="topic in store.currentProblem.topics" :key="topic" size="small" variant="outlined">{{ topic }}</v-chip>
+          </template>
+          <v-chip v-else size="small" variant="outlined" prepend-icon="mdi-lock-outline">Topics unlock after the data-structure checkpoint</v-chip>
         </div>
         <p class="problem-description">{{ store.currentProblem.description }}</p>
         <div class="example-box mt-6">

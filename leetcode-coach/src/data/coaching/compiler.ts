@@ -164,7 +164,7 @@ export const compileQuestionPath = (problem: Problem, allProblems: Problem[]): Q
     contract: question(problem, 'contract', 'Comprehension', `Which statement is the actual contract for ${problem.title}?`, contractText, descriptionChoices, 'This is the exact required task; a valid algorithm must also satisfy the remaining qualifications in the full statement.', 'Separate what the function must return from examples of how it may be computed.'),
     bottleneck: question(problem, 'bottleneck', 'Pattern', 'What makes the straightforward approach unnecessarily expensive or unreliable?', profile.bottleneck, profileChoices(profile, 'bottleneck'), profile.bottleneck, 'Identify the work that would be repeated by a direct enumeration or rescan.'),
     pattern: question(problem, 'pattern', 'Pattern', `Which recognition signal most directly supports the verified ${profile.title} solution taught here?`, profile.recognition, profileChoices(profile, 'recognition'), `This signal justifies using ${profile.title}.`, 'Look for the structural property that the algorithm exploits, not merely a topic label.'),
-    'data-structure': question(problem, 'data-structure', 'Data Structure', 'What state should the algorithm maintain?', profile.state, profileChoices(profile, 'state'), profile.state, 'Choose the smallest state that supports every required transition.'),
+    'data-structure': question(problem, 'data-structure', 'Data Structure', 'Before choosing an algorithm, which data structure or minimal maintained state is necessary to support an optimal solution?', profile.state, profileChoices(profile, 'state'), profile.state, 'Identify what must be stored or directly accessible before considering how the algorithm updates it. Some optimal solutions need only scalar variables rather than another collection.'),
     invariant: question(problem, 'invariant', 'Invariant', 'Which invariant must be true after every completed step?', profile.invariant, profileChoices(profile, 'invariant'), profile.invariant, 'Phrase the invariant as a claim about all work already processed.'),
     visualization: visualizationQuestion(problem, profile, contractText, example?.input ?? 'the provided input', example?.output ?? 'the required result'),
     'build-algorithm': algorithmBuilderQuestion(problem, profile),
@@ -177,7 +177,7 @@ export const compileQuestionPath = (problem: Problem, allProblems: Problem[]): Q
     tradeoff: question(problem, 'tradeoff', 'Complexity', 'Which tradeoff accurately characterizes this approach?', profile.tradeoff, profileChoices(profile, 'tradeoff'), profile.tradeoff, 'Compare this approach with the nearest plausible alternative and identify what resource or capability changes.'),
   }
 
-  const baseline: QuestionStage[] = ['contract', 'pattern', 'data-structure', 'invariant', 'visualization', 'build-algorithm', 'transition', 'correctness', 'time-complexity', 'space-complexity']
-  const deep: QuestionStage[] = ['contract', 'pattern', 'data-structure', 'invariant', 'visualization', 'bottleneck', 'build-algorithm', 'transition', 'correctness', 'edge-case', 'time-complexity', 'space-complexity', 'tradeoff']
+  const baseline: QuestionStage[] = ['contract', 'data-structure', 'pattern', 'invariant', 'visualization', 'build-algorithm', 'transition', 'correctness', 'time-complexity', 'space-complexity']
+  const deep: QuestionStage[] = ['contract', 'data-structure', 'pattern', 'invariant', 'visualization', 'bottleneck', 'build-algorithm', 'transition', 'correctness', 'edge-case', 'time-complexity', 'space-complexity', 'tradeoff']
   return (DEEP_PROBLEM_IDS.has(problem.id) ? deep : baseline).map((stage) => stages[stage])
 }
