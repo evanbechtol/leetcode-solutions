@@ -1,4 +1,7 @@
 import type { Problem, VisualizationFrame } from '../../types'
+import { traceToVisualizationFrames } from '../../tracing/compatibility'
+import { registerPilotTraceFixtures } from '../../tracing/fixtures'
+import { exactTraceForProblem } from '../../tracing/registry'
 
 type Variable = VisualizationFrame['variables'][number]
 type Structure = NonNullable<VisualizationFrame['structures']>[number]
@@ -15,21 +18,6 @@ const items = (values: Array<string | number>, statuses: Record<number, ItemStat
 const structure = (name: string, kind: Structure['kind'], description: string, values: Structure['items']): Structure => ({ name, kind, description, items: values })
 const mapItems = (entries: Array<[string | number, string | number]>, status: ItemStatus = 'processed') => entries.map(([key, value]) => ({ key: String(key), value: String(value), status }))
 
-const exactTwoSum = (problem: Problem): VisualizationFrame[] => {
-  const input = problem.examples[0].input
-  const output = problem.examples[0].output
-  const array = (statuses: Record<number, ItemStatus> = {}) => structure('nums', 'array', 'Original values and indices', items([2, 7, 11, 15], statuses))
-  const seen = (entries: Array<[number, number]>) => structure('seen', 'map', 'value → earlier index', mapItems(entries))
-  return [
-    { id: 'input', phase: 'Step 0', title: 'Load the exact input', action: 'Read nums and target before creating any algorithm state.', input, expectedOutput: output, currentOutput: 'Not produced yet', processed: 'No indices', remaining: 'Indices 0–3', activeCodeLines: [0], variables: [variable('target', '9', 'input'), variable('output', 'Not produced yet', 'output')], structures: [array()], invariant: 'No index has been processed, so no value has been recorded in seen.' },
-    { id: 'initialize', phase: 'Step 1', title: 'Create the value-to-index map', action: 'Initialize seen as an empty Map<number, number>.', input, expectedOutput: output, currentOutput: 'Not produced yet', processed: 'No indices', remaining: 'Indices 0–3', activeCodeLines: [1], variables: [variable('target', '9', 'input'), variable('i', 'Not started', 'control'), variable('output', 'Not produced yet', 'output')], structures: [array(), seen([])], invariant: 'seen contains exactly the values from indices strictly before i.' },
-    { id: 'first-candidate', phase: 'Step 2', title: 'Inspect nums[0]', action: 'Set i = 0 and compute complement = target - nums[i] = 9 - 2.', input, expectedOutput: output, currentOutput: 'Not produced yet', processed: 'Index 0 is being evaluated', remaining: 'Indices 1–3', activeCodeLines: [2, 3], variables: [variable('target', '9', 'input'), variable('i', '0', 'control', 'Not started'), variable('nums[i]', '2', 'control'), variable('complement', '7', 'state'), variable('seen.has(7)', 'false', 'state'), variable('output', 'Not produced yet', 'output')], structures: [array({ 0: 'active' }), seen([])], invariant: 'seen is still empty because the current value has not been inserted before its lookup.' },
-    { id: 'record-first', phase: 'Step 3', title: 'Record nums[0]', action: 'The complement 7 was not found, so store seen.set(2, 0).', input, expectedOutput: output, currentOutput: 'Not produced yet', processed: 'Index 0', remaining: 'Indices 1–3', activeCodeLines: [4, 5], variables: [variable('target', '9', 'input'), variable('i', '0', 'control'), variable('nums[i]', '2', 'control'), variable('complement', '7', 'state'), variable('seen.has(7)', 'false', 'state'), variable('output', 'Not produced yet', 'output')], structures: [array({ 0: 'processed' }), seen([[2, 0]])], invariant: 'seen now maps every processed value to its original index: 2 → 0.' },
-    { id: 'match', phase: 'Step 4', title: 'Find the partner for nums[1]', action: 'At i = 1, complement is 2. seen.has(2) is true, so the stored index is 0.', input, expectedOutput: output, currentOutput: '[0, 1]', processed: 'Indices 0–1', remaining: 'No further work is needed', activeCodeLines: [2, 3, 4], variables: [variable('target', '9', 'input'), variable('i', '1', 'control', '0'), variable('nums[i]', '7', 'control', '2'), variable('complement', '2', 'state', '7'), variable('seen.has(2)', 'true', 'state', 'false'), variable('seen.get(2)', '0', 'state'), variable('output', '[0, 1]', 'output', 'Not produced yet')], structures: [array({ 0: 'result', 1: 'result' }), seen([[2, 0]])], invariant: 'The map entry came from an earlier index, so indices 0 and 1 are distinct and their values sum to 9.' },
-    { id: 'finish', phase: 'Step 5', title: 'Return the matching indices', action: 'Return [seen.get(complement), i], which is [0, 1].', input, expectedOutput: output, currentOutput: '[0, 1]', processed: 'Indices 0–1', remaining: 'Nothing—the function returned', activeCodeLines: [4], variables: [variable('target', '9', 'input'), variable('i', '1', 'control'), variable('complement', '2', 'state'), variable('output', '[0, 1]', 'output')], structures: [array({ 0: 'result', 1: 'result' }), seen([[2, 0]])], invariant: 'nums[0] + nums[1] = 2 + 7 = 9, so the returned indices satisfy the contract.' },
-  ]
-}
-
 const exactLongestSubstring = (problem: Problem): VisualizationFrame[] => {
   const input = problem.examples[0].input
   const output = problem.examples[0].output
@@ -43,21 +31,6 @@ const exactLongestSubstring = (problem: Problem): VisualizationFrame[] => {
     { id: 'first-window', phase: 'Step 3', title: 'Build the window abc', action: 'Process b at index 1 and c at index 2; neither has appeared before.', input, expectedOutput: output, currentOutput: '3', processed: 'Indices 0–2', remaining: 'Indices 3–7', activeCodeLines: [3, 4, 5, 6], variables: [variable('right', '2', 'control', '0'), variable('s[right]', '"c"', 'control', '"a"'), variable('left', '0', 'state'), variable('best', '3', 'output', '1'), variable('right - left + 1', '3', 'state', '1')], structures: [stringView({ 0: 'candidate', 1: 'candidate', 2: 'active' }), last([['a', 0], ['b', 1], ['c', 2]])], invariant: 's[0…2] = "abc" has no repeated character and best is its length, 3.' },
     { id: 'move-left', phase: 'Step 4', title: 'Move past the repeated a', action: 'At right = 3, last[a] = 0, so left becomes max(0, 0 + 1) = 1.', input, expectedOutput: output, currentOutput: '3', processed: 'Indices 0–3', remaining: 'Indices 4–7', activeCodeLines: [3, 4, 5, 6], variables: [variable('right', '3', 'control', '2'), variable('s[right]', '"a"', 'control', '"c"'), variable('left', '1', 'state', '0'), variable('last.get("a")', '0', 'state'), variable('best', '3', 'output')], structures: [stringView({ 0: 'discarded', 1: 'candidate', 2: 'candidate', 3: 'active' }), last([['a', 3], ['b', 1], ['c', 2]])], invariant: 'The active window s[1…3] = "bca" is unique; left never moves backward.' },
     { id: 'finish', phase: 'Step 5', title: 'Finish the scan', action: 'Continue through indices 4–7. No later valid window is longer than 3.', input, expectedOutput: output, currentOutput: '3', processed: 'Indices 0–7', remaining: 'Nothing', activeCodeLines: [3, 4, 5, 6, 8], variables: [variable('right', '7', 'control', '3'), variable('s[right]', '"b"', 'control', '"a"'), variable('left', '7', 'state', '1'), variable('best', '3', 'output')], structures: [stringView({ 0: 'discarded', 1: 'discarded', 2: 'discarded', 3: 'discarded', 4: 'discarded', 5: 'discarded', 6: 'discarded', 7: 'active' }), last([['a', 3], ['b', 7], ['c', 5]])], invariant: 'best is the greatest valid window length measured at every right boundary, so the answer is 3.' },
-  ]
-}
-
-const exactBinarySearch = (problem: Problem): VisualizationFrame[] => {
-  const input = problem.examples[0].input
-  const output = problem.examples[0].output
-  const values = [-1, 0, 3, 5, 9, 12]
-  const nums = (statuses: Record<number, ItemStatus> = {}) => structure('nums', 'array', 'Sorted candidates by index', items(values, statuses))
-  return [
-    { id: 'input', phase: 'Step 0', title: 'Load the sorted candidates', action: 'Read nums and target = 9.', input, expectedOutput: output, currentOutput: 'Not produced yet', processed: 'No comparisons', remaining: 'Indices 0–5', activeCodeLines: [0], variables: [variable('target', '9', 'input'), variable('output', 'Not produced yet', 'output')], structures: [nums()], invariant: 'Every index is still a possible answer.' },
-    { id: 'initialize', phase: 'Step 1', title: 'Set inclusive boundaries', action: 'Set left = 0 and right = nums.length - 1 = 5.', input, expectedOutput: output, currentOutput: 'Not produced yet', processed: 'No comparisons', remaining: 'Indices 0–5', activeCodeLines: [1], variables: [variable('target', '9', 'input'), variable('left', '0', 'control'), variable('right', '5', 'control'), variable('output', 'Not produced yet', 'output')], structures: [nums({ 0: 'candidate', 1: 'candidate', 2: 'candidate', 3: 'candidate', 4: 'candidate', 5: 'candidate' })], invariant: 'If target exists, its index is inside [left, right] = [0, 5].' },
-    { id: 'first-mid', phase: 'Step 2', title: 'Inspect midpoint 2', action: 'Compute mid = 0 + floor((5 - 0) / 2) = 2; nums[2] = 3.', input, expectedOutput: output, currentOutput: 'Not produced yet', processed: 'Compared index 2', remaining: 'Indices 0–5 before the update', activeCodeLines: [2, 3, 4], variables: [variable('left', '0', 'control'), variable('right', '5', 'control'), variable('mid', '2', 'state'), variable('nums[mid]', '3', 'state'), variable('target', '9', 'input')], structures: [nums({ 0: 'candidate', 1: 'candidate', 2: 'active', 3: 'candidate', 4: 'candidate', 5: 'candidate' })], invariant: 'The target, if present, remains inside the current inclusive interval.' },
-    { id: 'discard-left', phase: 'Step 3', title: 'Discard indices 0 through 2', action: 'Because 3 < 9, set left = mid + 1 = 3.', input, expectedOutput: output, currentOutput: 'Not produced yet', processed: 'Indices 0–2 eliminated', remaining: 'Indices 3–5', activeCodeLines: [5], variables: [variable('left', '3', 'control', '0'), variable('right', '5', 'control'), variable('mid', '2', 'state'), variable('nums[mid] < target', 'true', 'state')], structures: [nums({ 0: 'discarded', 1: 'discarded', 2: 'discarded', 3: 'candidate', 4: 'candidate', 5: 'candidate' })], invariant: 'Sorted order proves target 9 cannot occur at indices 0–2.' },
-    { id: 'find-target', phase: 'Step 4', title: 'Inspect midpoint 4', action: 'Compute mid = 3 + floor((5 - 3) / 2) = 4; nums[4] = 9.', input, expectedOutput: output, currentOutput: '4', processed: 'Indices 0–2 eliminated; index 4 checked', remaining: 'No further search is needed', activeCodeLines: [2, 3, 4], variables: [variable('left', '3', 'control'), variable('right', '5', 'control'), variable('mid', '4', 'state', '2'), variable('nums[mid]', '9', 'state', '3'), variable('nums[mid] === target', 'true', 'state'), variable('output', '4', 'output', 'Not produced yet')], structures: [nums({ 0: 'discarded', 1: 'discarded', 2: 'discarded', 3: 'candidate', 4: 'result', 5: 'candidate' })], invariant: 'nums[4] equals target, so index 4 is a proven answer.' },
-    { id: 'finish', phase: 'Step 5', title: 'Return index 4', action: 'Return mid immediately after the equality check succeeds.', input, expectedOutput: output, currentOutput: '4', processed: 'Two midpoint comparisons', remaining: 'Nothing—the function returned', activeCodeLines: [4], variables: [variable('mid', '4', 'state'), variable('nums[mid]', '9', 'state'), variable('target', '9', 'input'), variable('output', '4', 'output')], structures: [nums({ 0: 'discarded', 1: 'discarded', 2: 'discarded', 4: 'result' })], invariant: 'The returned index contains target exactly: nums[4] = 9.' },
   ]
 }
 
@@ -96,9 +69,10 @@ const exactCourseSchedule = (problem: Problem): VisualizationFrame[] => {
 }
 
 export const buildExactExecutionTrace = (problem: Problem): VisualizationFrame[] | null => {
-  if (problem.id === 1) return exactTwoSum(problem)
+  registerPilotTraceFixtures()
+  const typedTrace = exactTraceForProblem(problem.id)
+  if (typedTrace) return traceToVisualizationFrames(typedTrace, problem.solutionLanguage ?? 'TypeScript')
   if (problem.id === 3) return exactLongestSubstring(problem)
-  if (problem.id === 704) return exactBinarySearch(problem)
   if (problem.id === 102) return exactTreeBfs(problem)
   if (problem.id === 207) return exactCourseSchedule(problem)
   return null

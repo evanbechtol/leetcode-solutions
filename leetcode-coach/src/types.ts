@@ -89,6 +89,8 @@ export interface VisualizationFrame {
     items: Array<{
       key: string
       value: string
+      previousValue?: string
+      changed?: boolean
       status?: 'active' | 'processed' | 'candidate' | 'discarded' | 'queued' | 'result'
     }>
   }>

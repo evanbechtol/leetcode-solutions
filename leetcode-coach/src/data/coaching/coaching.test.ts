@@ -29,7 +29,7 @@ describe('deterministic coaching catalog', () => {
       expect(constructionIndex).toBe(problem.questions.length - 3)
       expect(problem.questions.slice(constructionIndex + 1).map(({ stage }) => stage)).toEqual(['time-complexity', 'space-complexity'])
       const visualization = compileLessonVisualization(problem).visualization!
-      expect(visualization.frames).toHaveLength(6)
+      expect(visualization.frames.length).toBeGreaterThanOrEqual(6)
       expect(visualization.code.trim()).not.toBe('')
       for (const frame of visualization.frames) {
         expect(frame.input).toBe(visualization.input)
@@ -114,7 +114,7 @@ describe('deterministic coaching catalog', () => {
     for (const lesson of lessons) {
       const visualization = lessonVisualizationFor(lesson.slug)
       expect(visualization?.question.format).toBe('iteration-visualization')
-      expect(visualization?.question.visualization?.frames).toHaveLength(6)
+      expect(visualization?.question.visualization?.frames.length).toBeGreaterThanOrEqual(6)
     }
   })
 })

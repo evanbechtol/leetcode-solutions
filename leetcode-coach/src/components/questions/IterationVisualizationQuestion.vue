@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { TRACE_PLAYBACK_SPEEDS, useTracePlayback } from '../../composables/useTracePlayback'
 import type { QuestionInteractionState, QuizQuestion } from '../../types'
 import { evaluateSelectedOption } from '../../utils/questionEvaluation'
 
@@ -9,27 +10,53 @@ const emit = defineEmits<{
 }>()
 
 const restored = props.initialState?.format === 'iteration-visualization' ? props.initialState : null
-const frameIndex = ref(restored?.frameIndex ?? 0)
-const furthestFrame = ref(restored?.furthestFrame ?? 0)
-const selectedAnswer = ref<number | null>(restored?.selectedAnswer ?? null)
 const config = computed(() => props.question.visualization!)
+const frameCount = computed(() => config.value.frames.length)
+const {
+  frameIndex, furthestFrame, playing, speed, reducedMotion, finalFrame,
+  canPrevious, canNext, goTo, previous, next, restart, toggle, setSpeed,
+} = useTracePlayback({
+  frameCount,
+  initialIndex: restored?.frameIndex,
+  initialFurthest: restored?.furthestFrame,
+})
+const selectedAnswer = ref<number | null>(restored?.selectedAnswer ?? null)
 const frame = computed(() => config.value.frames[frameIndex.value])
 const codeLines = computed(() => config.value.code.split('\n'))
-const finalFrame = computed(() => frameIndex.value === config.value.frames.length - 1)
 const evaluation = computed(() => evaluateSelectedOption(props.question.answer, selectedAnswer.value))
 const isCorrect = computed(() => evaluation.value.correct)
 const variableGroups = computed(() => (['input', 'control', 'state', 'output'] as const)
   .map((role) => ({ role, variables: frame.value.variables.filter((item) => item.role === role) }))
   .filter(({ variables }) => variables.length))
 
-function goTo(index: number) {
-  if (index < 0 || index >= config.value.frames.length || index > furthestFrame.value + 1) return
-  frameIndex.value = index
-  furthestFrame.value = Math.max(furthestFrame.value, index)
+const changedItems = computed(() => frame.value.structures?.flatMap((structure) =>
+  structure.items.filter(({ changed }) => changed).map(({ key }) => `${structure.name}[${key}]`)) ?? [])
+const changedVariables = computed(() => frame.value.variables.filter(({ changed }) => changed).map(({ name }) => name))
+const announcement = computed(() => {
+  const changes = [...changedVariables.value, ...changedItems.value]
+  return `${frame.value.phase}: ${frame.value.title}. ${frame.value.action}${changes.length ? ` Changed: ${changes.join(', ')}.` : ' No stored value changed.'}`
+})
+
+function selectFrame(index: number) {
+  if (index === frameIndex.value + 1 && index === furthestFrame.value + 1) next()
+  else goTo(index)
 }
 
-function nextFrame() {
-  goTo(frameIndex.value + 1)
+function handleKeydown(event: KeyboardEvent) {
+  const target = event.target as HTMLElement
+  if (['SELECT', 'OPTION', 'INPUT'].includes(target.tagName)) return
+  if (event.target !== event.currentTarget && event.key === ' ') return
+  if (event.key === 'ArrowRight' && canNext.value) next()
+  else if (event.key === 'ArrowLeft' && canPrevious.value) previous()
+  else if (event.key === ' ') toggle()
+  else if (event.key === 'Home') goTo(0)
+  else if (event.key === 'End') goTo(furthestFrame.value)
+  else return
+  event.preventDefault()
+}
+
+function changeSpeed(event: Event) {
+  setSpeed(Number((event.target as HTMLSelectElement).value))
 }
 
 function choose(index: number) {
@@ -52,7 +79,14 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
 </script>
 
 <template>
-  <div class="iteration-visualizer mt-7">
+  <div
+    class="iteration-visualizer mt-7"
+    :class="{ 'reduced-motion': reducedMotion }"
+    tabindex="0"
+    aria-label="Algorithm trace player. Use left and right arrows to move, Space to play or pause, Home to restart, and End to jump to the furthest visited step."
+    @keydown="handleKeydown"
+  >
+    <p class="sr-only" aria-live="polite" aria-atomic="true">{{ announcement }}</p>
     <div class="visualizer-io">
       <div><span>Example input</span><code>{{ frame.input }}</code></div>
       <div><span>Expected output</span><code>{{ frame.expectedOutput }}</code></div>
@@ -65,16 +99,37 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
         :key="item.id"
         type="button"
         role="tab"
+        aria-controls="trace-current-frame"
         :aria-selected="frameIndex === index"
         :disabled="index > furthestFrame + 1"
         :class="{ active: frameIndex === index, visited: index <= furthestFrame }"
-        @click="goTo(index)"
+        @click="selectFrame(index)"
       >
         <span>{{ index + 1 }}</span><small>{{ item.phase }}</small>
       </button>
     </div>
 
-    <section class="visualizer-frame" aria-live="polite">
+    <div class="visualizer-playback" role="group" aria-label="Trace playback controls">
+      <div class="playback-progress" aria-hidden="true"><strong>{{ frameIndex + 1 }}</strong><span>/ {{ config.frames.length }}</span></div>
+      <v-btn icon="mdi-restart" variant="text" size="small" aria-label="Restart trace" @click="restart" />
+      <v-btn icon="mdi-skip-previous" variant="text" size="small" :disabled="!canPrevious" aria-label="Previous step" @click="previous" />
+      <v-btn
+        :icon="playing ? 'mdi-pause' : 'mdi-play'"
+        color="primary"
+        size="small"
+        :aria-label="playing ? 'Pause trace' : 'Play trace'"
+        @click="toggle"
+      />
+      <v-btn icon="mdi-skip-next" variant="text" size="small" :disabled="!canNext" aria-label="Next step" @click="next" />
+      <label class="playback-speed">
+        <span>Speed</span>
+        <select :value="speed" aria-label="Playback speed" @change="changeSpeed">
+          <option v-for="option in TRACE_PLAYBACK_SPEEDS" :key="option" :value="option">{{ option }}×</option>
+        </select>
+      </label>
+    </div>
+
+    <section id="trace-current-frame" class="visualizer-frame" aria-live="polite">
       <header><span>{{ frame.phase }}</span><h3>{{ frame.title }}</h3></header>
       <div class="visualizer-execution-summary">
         <div class="visualizer-action"><v-icon icon="mdi-play-circle-outline" /><p>{{ frame.action }}</p></div>
@@ -96,10 +151,11 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
           <article v-for="dataStructure in frame.structures" :key="dataStructure.name" class="visualizer-structure" :class="`structure-${dataStructure.kind}`">
             <div class="structure-heading"><div><code>{{ dataStructure.name }}</code><span>{{ dataStructure.kind }}</span></div><p>{{ dataStructure.description }}</p></div>
             <div v-if="dataStructure.items.length" class="structure-items">
-              <div v-for="item in dataStructure.items" :key="`${item.key}-${item.value}`" class="structure-item" :class="item.status ? `status-${item.status}` : ''">
+              <div v-for="item in dataStructure.items" :key="`${item.key}-${item.value}`" class="structure-item" :class="[item.status ? `status-${item.status}` : '', { changed: item.changed }]">
                 <span>{{ item.key }}</span>
                 <strong>{{ item.value }}</strong>
-                <small v-if="item.status">{{ item.status }}</small>
+                <small v-if="item.changed" class="structure-change-label">changed</small>
+                <small v-else-if="item.status">{{ item.status }}</small>
               </div>
             </div>
             <div v-else class="structure-empty">Empty</div>
@@ -114,6 +170,7 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
               <article v-for="variable in group.variables" :key="variable.name" class="visualizer-variable" :class="[`role-${variable.role}`, { changed: variable.changed }]">
                 <div class="variable-name"><code>{{ variable.name }}</code><span>{{ variable.role }}</span></div>
                 <div class="variable-value">
+                  <em v-if="variable.changed" class="variable-change-label">Changed</em>
                   <small v-if="variable.previousValue"><s>{{ variable.previousValue }}</s><v-icon icon="mdi-arrow-right" size="13" /></small>
                   <strong>{{ variable.value }}</strong>
                 </div>
@@ -136,8 +193,8 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
     </section>
 
     <div v-if="!finalFrame || lessonMode" class="visualizer-nav">
-      <v-btn variant="text" :disabled="frameIndex === 0" prepend-icon="mdi-arrow-left" @click="goTo(frameIndex - 1)">Previous</v-btn>
-      <v-btn v-if="!finalFrame" color="primary" append-icon="mdi-arrow-right" @click="nextFrame">Run next step</v-btn>
+      <v-btn variant="text" :disabled="!canPrevious" prepend-icon="mdi-arrow-left" @click="previous">Previous</v-btn>
+      <v-btn v-if="!finalFrame" color="primary" append-icon="mdi-arrow-right" @click="next">Run next step</v-btn>
     </div>
 
     <div v-else-if="!lessonMode" class="visualizer-checkpoint">
