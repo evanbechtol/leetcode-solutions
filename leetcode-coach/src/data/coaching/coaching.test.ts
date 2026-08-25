@@ -33,6 +33,7 @@ describe('deterministic coaching catalog', () => {
       expect(visualizationQuestion.format).toBe('iteration-visualization')
       if (visualizationQuestion.format !== 'iteration-visualization') throw new Error('Expected visualization question')
       const visualization = visualizationQuestion.config
+      expect(['exact-reviewed', 'instructional-overview']).toContain(visualization.traceQuality)
       expect(visualization.frames.length).toBeGreaterThanOrEqual(6)
       expect(visualization.code.trim()).not.toBe('')
       for (const frame of visualization.frames) {
@@ -108,6 +109,7 @@ describe('deterministic coaching catalog', () => {
       const question = compileLessonVisualization(problem)
       if (question.format !== 'iteration-visualization') throw new Error('Expected visualization')
       const frames = question.config.frames
+      expect(question.config.traceQuality).toBe('exact-reviewed')
       expect(frames.every(({ structures }) => structures !== undefined)).toBe(true)
       expect(frames.flatMap(({ variables }) => variables).some(({ name }) => genericNames.has(name))).toBe(false)
       expect(frames.flatMap(({ structures }) => structures ?? []).flatMap(({ items }) => items).length).toBeGreaterThan(0)

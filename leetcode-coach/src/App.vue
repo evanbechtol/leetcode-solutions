@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTrainerStore } from './stores/trainer'
+import FeedbackDialog from './components/FeedbackDialog.vue'
+import { publicReleaseConfig } from './config/publicRelease'
 
 const store = useTrainerStore()
 const mobileNavOpen = ref(false)
+const feedbackOpen = ref(false)
+let recordedRuntimeError = false
 const navigation = [
   { to: '/today', label: 'Today', description: 'Complete a small mastery session', icon: 'mdi-calendar-check-outline' },
   { to: '/paths', label: 'Paths', description: 'Follow the learning map', icon: 'mdi-map-marker-path' },
@@ -13,6 +17,22 @@ const navigation = [
   { to: '/cheat-sheet', label: 'Cheat Sheet', description: 'Search common patterns', icon: 'mdi-notebook-outline' },
   { to: '/profile', label: 'Progress', description: 'Review accuracy and mastery', icon: 'mdi-chart-donut' },
 ]
+
+function recordRuntimeError() {
+  if (recordedRuntimeError) return
+  recordedRuntimeError = true
+  store.recordProductEvent('application_error', { kind: 'runtime' })
+}
+
+onMounted(() => {
+  window.addEventListener('error', recordRuntimeError)
+  window.addEventListener('unhandledrejection', recordRuntimeError)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('error', recordRuntimeError)
+  window.removeEventListener('unhandledrejection', recordRuntimeError)
+})
 </script>
 
 <template>
@@ -50,7 +70,25 @@ const navigation = [
       <div class="mobile-nav-footer">All progress stays on this device.</div>
     </v-navigation-drawer>
     <v-main>
+      <v-banner v-if="publicReleaseConfig.betaEnabled" class="beta-banner" icon="mdi-flask-outline" lines="one">
+        Pathfinder public beta · Learning data stays in this browser.
+        <template #actions><v-btn size="small" variant="text" @click="feedbackOpen = true">Give feedback</v-btn></template>
+      </v-banner>
       <router-view />
     </v-main>
+    <footer class="app-footer">
+      <div class="app-shell px-5 px-md-8">
+        <div><span class="brand-name">pathfinder</span><small>Reviewed coaching. Private by default.</small></div>
+        <nav aria-label="Product information">
+          <router-link to="/privacy">Privacy</router-link>
+          <router-link to="/content-policy">Content</router-link>
+          <router-link to="/accessibility">Accessibility</router-link>
+          <router-link to="/changelog">Changelog</router-link>
+          <router-link to="/data">Your data</router-link>
+        </nav>
+        <v-btn variant="outlined" prepend-icon="mdi-message-text-outline" @click="feedbackOpen = true">Give feedback</v-btn>
+      </div>
+    </footer>
+    <FeedbackDialog v-model="feedbackOpen" />
   </v-app>
 </template>

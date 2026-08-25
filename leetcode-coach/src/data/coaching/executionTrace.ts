@@ -2,6 +2,11 @@ import type { Problem, VisualizationFrame } from '../../types'
 import type { BeginnerPatternProfile } from './beginnerProfiles'
 import { buildExactExecutionTrace } from './exactExecutionTraces'
 
+export interface ExecutionTraceResult {
+  quality: 'exact-reviewed' | 'instructional-overview'
+  frames: VisualizationFrame[]
+}
+
 interface InputVariable { name: string; value: string }
 
 const splitTopLevel = (value: string) => {
@@ -132,9 +137,9 @@ export const buildExecutionTrace = (
   beginner: BeginnerPatternProfile,
   input: string,
   expectedOutput: string,
-): VisualizationFrame[] => {
+): ExecutionTraceResult => {
   const exactTrace = buildExactExecutionTrace(problem)
-  if (exactTrace) return exactTrace
+  if (exactTrace) return { quality: 'exact-reviewed', frames: exactTrace }
   const inputs = inputVariables(input)
   const exactInputs = inputState(inputs)
   const exactStructures = inputStructures(inputs)
@@ -143,7 +148,7 @@ export const buildExecutionTrace = (
   const primaryInput = inputs[0]?.name ?? 'input'
   const pendingOutput = 'Not produced yet'
 
-  return [
+  return { quality: 'instructional-overview', frames: [
     {
       id: 'input', phase: 'Step 0', title: 'Load the example',
       action: 'Read every input variable and the output the algorithm must eventually produce.',
@@ -222,5 +227,5 @@ export const buildExecutionTrace = (
       structures: exactStructures,
       invariant: 'All required work is complete, so the final state gives the requested output.',
     },
-  ]
+  ] }
 }

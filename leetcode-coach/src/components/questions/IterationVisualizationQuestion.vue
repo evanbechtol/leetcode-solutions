@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import ContentTrustDisclosure from '../ContentTrustDisclosure.vue'
 import { TRACE_PLAYBACK_SPEEDS, useTracePlayback } from '../../composables/useTracePlayback'
 import type { QuestionInteractionResult, QuestionInteractionState, QuizQuestion } from '../../types'
 import { evaluateSelectedOption } from '../../utils/questionEvaluation'
@@ -45,7 +46,7 @@ function selectFrame(index: number) {
 
 function handleKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement
-  if (['SELECT', 'OPTION', 'INPUT'].includes(target.tagName)) return
+  if (target !== event.currentTarget && target.closest('button, a, input, select, textarea, summary')) return
   if (event.target !== event.currentTarget && event.key === ' ') return
   if (event.key === 'ArrowRight' && canNext.value) next()
   else if (event.key === 'ArrowLeft' && canPrevious.value) previous()
@@ -92,6 +93,12 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
     @keydown="handleKeydown"
   >
     <p class="sr-only" aria-live="polite" aria-atomic="true">{{ announcement }}</p>
+    <ContentTrustDisclosure
+      :content-version="question.contentVersion"
+      :canonical-approach="question.explanation"
+      complexity-assumptions="The displayed states follow the canonical implementation and the constraints stated for this example."
+      :trace-quality="config.traceQuality"
+    />
     <div class="visualizer-io">
       <div><span>Example input</span><code>{{ frame.input }}</code></div>
       <div><span>Expected output</span><code>{{ frame.expectedOutput }}</code></div>

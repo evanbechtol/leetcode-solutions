@@ -193,7 +193,7 @@ const visualizationQuestion = (
     'The right action must use the current item and leave the stored information ready for the next one.',
     guidance('Watch the information change', 'Move through the frames slowly. At each frame, notice what changed and what stayed true.', 'Iteration', 'One repeated pass through a step of an algorithm.'),
   )
-  const frames = buildExecutionTrace(problem, beginner, input, output)
+  const trace = buildExecutionTrace(problem, beginner, input, output)
   return {
     ...base,
     id: `${problem.id}:static-v4:visualization`,
@@ -206,7 +206,8 @@ const visualizationQuestion = (
       expectedOutput: output,
       code: problem.solution,
       language: problem.solutionLanguage ?? 'TypeScript',
-      frames,
+      traceQuality: trace.quality,
+      frames: trace.frames,
       checkpoint: base.config,
     },
   }

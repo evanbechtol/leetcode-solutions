@@ -43,6 +43,11 @@ const router = createRouter({
     { path: '/learn/:slug?', name: 'learn', component: () => import('./views/LearnView.vue') },
     { path: '/cheat-sheet', name: 'cheat-sheet', component: () => import('./views/CheatSheetView.vue') },
     { path: '/profile', component: ProfileView },
+    { path: '/privacy', name: 'privacy', component: () => import('./views/PublicInformationView.vue'), props: { documentKey: 'privacy' } },
+    { path: '/content-policy', name: 'content-policy', component: () => import('./views/PublicInformationView.vue'), props: { documentKey: 'content-policy' } },
+    { path: '/accessibility', name: 'accessibility', component: () => import('./views/PublicInformationView.vue'), props: { documentKey: 'accessibility' } },
+    { path: '/changelog', name: 'changelog', component: () => import('./views/PublicInformationView.vue'), props: { documentKey: 'changelog' } },
+    { path: '/data', name: 'data-guide', component: () => import('./views/PublicInformationView.vue'), props: { documentKey: 'data' } },
     ...(import.meta.env.DEV ? [
       { path: '/__dev/progress', name: 'dev-progress', component: () => import('./views/DevProgressView.vue') },
     ] : []),

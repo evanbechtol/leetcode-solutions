@@ -189,6 +189,7 @@ export interface IterationVisualizationConfig {
   expectedOutput: string
   code: string
   language: string
+  traceQuality: 'exact-reviewed' | 'instructional-overview'
   frames: VisualizationFrame[]
   checkpoint: MultipleChoiceConfig
 }

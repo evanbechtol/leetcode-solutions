@@ -11,6 +11,8 @@ import rust from 'highlight.js/lib/languages/rust'
 import { useTrainerStore } from '../stores/trainer'
 import { useCodeLanguagePreference } from '../composables/useCodeLanguagePreference'
 import FilterPanel from '../components/FilterPanel.vue'
+import ContentTrustDisclosure from '../components/ContentTrustDisclosure.vue'
+import { COACHING_CONTENT_VERSION } from '../data/coaching/contentVersion'
 import { questionComponentFor } from '../components/questions/registry'
 import { incorrectFeedbackFor } from '../utils/quizFeedback'
 import { parseProblemRouteId, problemRoutePath } from '../utils/problemRoutes'
@@ -129,6 +131,19 @@ const highlightedSolution = computed(() => hljs.highlight(displayedSolution.valu
   language: highlightLanguage.value,
   ignoreIllegals: true,
 }).value)
+const complexityAssumptions = computed(() => {
+  if (!sessionComplete.value) return 'The reviewed bounds are withheld until the learner completes the reasoning path.'
+  const decisions = store.activeQuestions
+    .filter(({ stage }) => stage === 'time-complexity' || stage === 'space-complexity')
+    .map(({ explanation }) => explanation)
+  return decisions.length ? decisions.join(' ') : 'Complexity is evaluated under the constraints shown for this problem.'
+})
+const canonicalApproachDisclosure = computed(() => {
+  if (!sessionComplete.value) return 'The reviewed approach is withheld until the learner completes the reasoning path.'
+  return store.currentProblem?.insight
+    || store.activeQuestions.find(({ stage }) => stage === 'pattern')?.explanation
+    || 'The completed implementation is the reviewed canonical approach for this path.'
+})
 
 function scrollPageToTop() {
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
@@ -372,6 +387,13 @@ async function copySolution() {
           <ul><li v-for="constraint in store.currentProblem.constraints" :key="constraint">{{ constraint }}</li></ul>
         </div>
         <a v-if="store.currentProblem.source" :href="`${store.currentProblem.source.repository}#readme`" target="_blank" rel="noreferrer" class="source-note mt-6"><v-icon icon="mdi-source-repository" size="16" /> {{ store.currentProblem.source.name }} {{ store.currentProblem.source.version }} · {{ store.currentProblem.source.license }}</a>
+        <ContentTrustDisclosure
+          class="mt-6"
+          :content-version="COACHING_CONTENT_VERSION"
+          :canonical-approach="canonicalApproachDisclosure"
+          :complexity-assumptions="complexityAssumptions"
+          :source="store.currentProblem.source"
+        />
       </aside>
 
       <main ref="questionPanel" class="coach-panel">

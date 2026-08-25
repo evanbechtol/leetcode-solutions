@@ -36,6 +36,19 @@ The browser never receives the API key. Current static coaching paths deliberate
 
 Create a production build with `npm run build`; the output is written to `dist/`.
 
+## Public beta configuration
+
+The static public release can show a non-intrusive beta banner and open a public feedback destination. Both controls are browser-visible build-time configuration and must never contain secrets:
+
+```bash
+VITE_PUBLIC_BETA_ENABLED=true
+VITE_PUBLIC_FEEDBACK_URL=https://example.com/pathfinder-feedback
+```
+
+When no feedback URL is configured, the persistent feedback form offers **Copy feedback** only. Drafts stay in local storage, and diagnostic counts are excluded unless the learner explicitly selects them. Pathfinder never submits the report itself.
+
+Public in-app routes document privacy (`#/privacy`), content policy (`#/content-policy`), accessibility (`#/accessibility`), the changelog (`#/changelog`), and progress backup/restore (`#/data`). The same links are available from the application’s global footer.
+
 ## Publish to GitHub Pages
 
 The Vite base path is relative and routing uses URL hashes, so the production build works from a repository subpath. Run:

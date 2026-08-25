@@ -5,6 +5,8 @@ import { lessons } from '../data/lessons'
 import { lessonVisualizationFor } from '../data/lessonVisualizations'
 import TreeDiagramNode from '../components/TreeDiagramNode.vue'
 import IterationVisualizationQuestion from '../components/questions/IterationVisualizationQuestion.vue'
+import ContentTrustDisclosure from '../components/ContentTrustDisclosure.vue'
+import { COACHING_CONTENT_VERSION } from '../data/coaching/contentVersion'
 import { useTrainerStore } from '../stores/trainer'
 
 const route = useRoute()
@@ -34,6 +36,9 @@ const lessonTrack = computed(() => lesson.value ? store.mapForLesson(lesson.valu
 const practiceNode = computed(() => lessonTrack.value?.nodes.find((node) => node.problemId && node.status !== 'stable')
   ?? lessonTrack.value?.nodes.find((node) => node.problemId)
   ?? null)
+const lessonComplexityAssumptions = computed(() => lesson.value?.complexity
+  .map(({ operation, time, space, note }) => `${operation}: ${time} time${space ? ` and ${space} space` : ''}. ${note}`)
+  .join(' ') ?? '')
 
 watch(lesson, (current) => {
   if (current) store.recordLessonOpened(current.slug)
@@ -130,6 +135,13 @@ function mentalModelParagraphs(model: string | string[]) {
             </div>
             <p class="reader-summary">{{ lesson.summary }}</p>
           </header>
+
+          <ContentTrustDisclosure
+            class="mt-5"
+            :content-version="COACHING_CONTENT_VERSION"
+            :canonical-approach="lesson.summary"
+            :complexity-assumptions="lessonComplexityAssumptions"
+          />
 
           <v-alert v-if="isRepairReview" class="repair-return-banner" density="comfortable" variant="tonal" type="info" icon="mdi-wrench-check-outline">
             You are reviewing one focused concept from your Error Atlas. Take the lesson at your pace, then return when you are ready.

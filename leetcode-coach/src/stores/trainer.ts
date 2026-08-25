@@ -33,6 +33,7 @@ import {
   type LearnerProfile,
   type ProgressRecovery,
   type ProgressStateV2,
+  type ProductEventName,
   type StorageLike,
 } from './progress'
 
@@ -275,7 +276,7 @@ export const useTrainerStore = defineStore('trainer', () => {
     }))
   }, { deep: true })
 
-  function recordProductEvent(name: string, properties?: Record<string, string | number | boolean>) {
+  function recordProductEvent(name: ProductEventName, properties?: Record<string, string | number | boolean>) {
     progressState.value.localEvents.push(createProductEvent(name, properties))
     if (progressState.value.localEvents.length > 1000) progressState.value.localEvents.splice(0, progressState.value.localEvents.length - 1000)
   }

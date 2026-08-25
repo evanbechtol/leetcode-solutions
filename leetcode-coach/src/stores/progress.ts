@@ -99,9 +99,40 @@ export interface MilestoneRecord {
   earnedAt: string
 }
 
+export type ProductEventName =
+  | 'answer_submitted'
+  | 'application_error'
+  | 'daily_session_completed'
+  | 'daily_session_created'
+  | 'daily_session_rebuilt'
+  | 'daily_task_completed'
+  | 'daily_task_started'
+  | 'feedback_diagnostics_included'
+  | 'feedback_draft_saved'
+  | 'feedback_opened'
+  | 'feedback_report_copied'
+  | 'feedback_url_opened'
+  | 'lesson_opened'
+  | 'milestone_card_downloaded'
+  | 'milestone_earned'
+  | 'milestone_link_copied'
+  | 'onboarding_completed'
+  | 'onboarding_decision_answered'
+  | 'onboarding_restarted'
+  | 'onboarding_skipped'
+  | 'onboarding_started'
+  | 'problem_completed'
+  | 'problem_started'
+  | 'progress_imported'
+  | 'repair_destination_opened'
+  | 'repair_opened'
+  | 'repair_reopened'
+  | 'repair_snoozed'
+  | 'repair_validated'
+
 export interface ProductEvent {
   id: string
-  name: string
+  name: ProductEventName
   occurredAt: string
   properties?: Record<string, string | number | boolean>
 }
@@ -562,7 +593,7 @@ export const createRepair = (
 ): RepairRecord => ({ ...input, id: idFor('repair'), openedAt: now.toISOString() })
 
 export const createProductEvent = (
-  name: string,
+  name: ProductEventName,
   properties?: ProductEvent['properties'],
   now = new Date(),
 ): ProductEvent => ({ id: idFor('event'), name, occurredAt: now.toISOString(), properties })
