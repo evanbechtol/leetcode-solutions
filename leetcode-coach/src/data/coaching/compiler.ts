@@ -2,7 +2,9 @@ import type {
   AlgorithmBuildStep,
   FormalTerm,
   HintLevel,
+  MultipleChoiceQuestion,
   Problem,
+  ReasoningSkillKey,
   QuestionStage,
   QuestionType,
   QuizQuestion,
@@ -14,6 +16,8 @@ import { patternProfiles, type PatternProfile } from './patterns'
 import { buildExecutionTrace } from './executionTrace'
 import { codeConstructionByProblemId } from './codeConstruction'
 import { categoryRepairLink } from '../repairMetadata'
+import { COACHING_CONTENT_VERSION } from './contentVersion'
+import { compilePilotCoreQuestions } from './intuitionCompiler'
 
 interface Choice { text: string; correct: boolean; feedback: string }
 interface Guidance { teachingContext: TeachingContext; formalTerm: FormalTerm }
@@ -105,6 +109,23 @@ const readingLevelNotes: Record<QuestionStage, string[]> = {
   tradeoff: ['Names concrete resources before introducing the formal term “trade-off”.'],
 }
 
+const reasoningSkillsByStage: Record<QuestionStage, ReasoningSkillKey[]> = {
+  contract: ['constraint-signal'],
+  bottleneck: ['runtime-feasibility'],
+  pattern: ['behavioral-pattern-recognition'],
+  'data-structure': ['operation-requirement', 'state-sufficiency'],
+  invariant: ['safe-discard'],
+  visualization: ['derivation-completion'],
+  'build-algorithm': ['derivation-completion'],
+  transition: ['safe-discard'],
+  trace: ['derivation-completion'],
+  correctness: ['proof-structure'],
+  'edge-case': ['proof-structure'],
+  'time-complexity': ['runtime-feasibility'],
+  'space-complexity': ['state-sufficiency'],
+  tradeoff: ['runtime-feasibility'],
+}
+
 const buildHintLevels = (stage: QuestionStage, firstHint: string): HintLevel[] => [
   { id: 'cue', label: 'Look here', text: firstHint },
   { id: 'concept', label: 'What to track', text: additionalHints[stage][0] },
@@ -121,7 +142,7 @@ const question = (
   explanation: string,
   hint: string,
   learnerGuidance: Guidance,
-): QuizQuestion => {
+): MultipleChoiceQuestion => {
   const choices = shuffled<Choice>([
     { text: correctText, correct: true, feedback: explanation },
     ...distractors.map((text) => ({ text, correct: false, feedback: wrongFeedback[stage] })),
@@ -133,19 +154,24 @@ const question = (
     format: 'multiple-choice',
     stage,
     prompt,
-    options: choices.map(({ text }) => text),
-    answer: choices.findIndex(({ correct }) => correct),
     explanation,
     hint,
     hintLevels: buildHintLevels(stage, hint),
     prerequisites: prerequisitesByStage[stage],
     readingLevelNotes: readingLevelNotes[stage],
+    reasoningSkillKeys: reasoningSkillsByStage[stage],
+    instructionalLevel: 'complete',
+    contentVersion: COACHING_CONTENT_VERSION,
     ...learnerGuidance,
-    optionFeedback: choices.map(({ feedback }) => feedback),
-    misconceptionLinks: choices.map((choice) => choice.correct
-      ? undefined
-      : categoryRepairLink(problem, stage, DEEP_PROBLEM_IDS.has(problem.id) ? 'reviewed-option' : 'category'),
-    ),
+    config: {
+      options: choices.map(({ text }) => text),
+      answer: choices.findIndex(({ correct }) => correct),
+      optionFeedback: choices.map(({ feedback }) => feedback),
+      misconceptionLinks: choices.map((choice) => choice.correct
+        ? undefined
+        : categoryRepairLink(problem, stage, DEEP_PROBLEM_IDS.has(problem.id) ? 'reviewed-option' : 'category'),
+      ),
+    },
   }
 }
 
@@ -172,12 +198,16 @@ const visualizationQuestion = (
     ...base,
     id: `${problem.id}:static-v4:visualization`,
     format: 'iteration-visualization',
-    visualization: {
+    reasoningSkillKeys: ['derivation-completion'],
+    instructionalLevel: 'observe',
+    contentVersion: COACHING_CONTENT_VERSION,
+    config: {
       input,
       expectedOutput: output,
       code: problem.solution,
       language: problem.solutionLanguage ?? 'TypeScript',
       frames,
+      checkpoint: base.config,
     },
   }
 }
@@ -209,18 +239,16 @@ const algorithmBuilderQuestion = (problem: Problem, profile: PatternProfile, beg
     format: 'algorithm-builder',
     stage: 'build-algorithm',
     prompt: 'Put the four parts of the solution in the order they must happen.',
-    options: steps.map(({ text }) => text),
-    answer: 0,
     explanation: 'First create the needed information. Then repeat the safe update while work remains. Finally, use the completed state as the answer.',
     hint: 'Start with the information the first real step needs. Finish only after every required piece of work is handled.',
     hintLevels: buildHintLevels('build-algorithm', 'Start with the information the first real step needs.'),
     prerequisites: prerequisitesByStage['build-algorithm'],
     readingLevelNotes: readingLevelNotes['build-algorithm'],
+    reasoningSkillKeys: ['derivation-completion'],
+    instructionalLevel: 'construct',
+    contentVersion: COACHING_CONTENT_VERSION,
     ...guidance('Build before seeing code', 'A complete algorithm needs a setup, a stopping rule, a repeated action, and a way to produce the answer.', 'Algorithm structure', 'The ordered parts that initialize, repeat, and finish a solution.'),
-    optionFeedback: steps.map(({ id }) => id.startsWith('decoy')
-      ? 'This step belongs to a different strategy. Use the information and action established for this problem.'
-      : 'This step is needed, but something it depends on may need to happen first.'),
-    builder: { steps, correctOrder: correctSteps.map(({ id }) => id) },
+    config: { steps, correctOrder: correctSteps.map(({ id }) => id) },
   }
 }
 
@@ -230,15 +258,16 @@ const codeConstructionQuestion = (problem: Problem, profile: PatternProfile): Qu
   format: 'code-construction',
   stage: 'build-algorithm',
   prompt: `Construct the optimal ${profile.title.toLocaleLowerCase()} implementation one decision at a time.`,
-  options: [],
-  answer: 0,
   explanation: 'Each selected line preserves the required state, makes progress, and assembles the reviewed canonical implementation.',
   hint: 'Use the state established by earlier decisions. Choose the next line that reads only available information and preserves the invariant.',
   hintLevels: buildHintLevels('build-algorithm', 'Use the state established by earlier decisions.'),
   prerequisites: prerequisitesByStage['build-algorithm'],
   readingLevelNotes: ['Introduces one implementation decision at a time and explains its state effect before showing the complete implementation.'],
+  reasoningSkillKeys: ['derivation-completion'],
+  instructionalLevel: 'construct',
+  contentVersion: COACHING_CONTENT_VERSION,
   ...guidance('Build the implementation', 'Choose one line or block at a time. Correct code stays in place so each new decision can build on it.', 'Code construction', 'The process of translating an algorithm into ordered, executable statements.'),
-  construction: codeConstructionByProblemId[problem.id],
+  config: codeConstructionByProblemId[problem.id]!,
 })
 
 const complexityDistractors = (correct: string, kind: 'time' | 'space') => {
@@ -359,6 +388,8 @@ export const compileQuestionPath = (problem: Problem, allProblems: Problem[]): Q
       guidance('Compare the cost', 'An optimization usually improves one property by spending another resource or adding a requirement.', 'Trade-off', 'A choice that improves one property while accepting a cost or limitation elsewhere.'),
     ),
   }
+
+  Object.assign(stages, compilePilotCoreQuestions(problem))
 
   const baseline: QuestionStage[] = ['contract', 'data-structure', 'pattern', 'invariant', 'transition', 'correctness', 'build-algorithm', 'time-complexity', 'space-complexity']
   const deep: QuestionStage[] = ['contract', 'data-structure', 'pattern', 'invariant', 'bottleneck', 'transition', 'correctness', 'edge-case', 'tradeoff', 'build-algorithm', 'time-complexity', 'space-complexity']

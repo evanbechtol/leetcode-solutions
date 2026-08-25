@@ -10,7 +10,9 @@ describe('reviewed onboarding content', () => {
     expect(onboardingDecisions.map(({ question }) => question.stage)).toEqual([
       'contract', 'data-structure', 'pattern', 'data-structure', 'time-complexity', 'space-complexity',
     ])
-    expect(onboardingDecisions.every(({ question }) => question.options.length >= 2)).toBe(true)
+    expect(onboardingDecisions.every(({ question }) => question.reasoningSkillKeys.length > 0)).toBe(true)
+    expect(onboardingDecisions.map(({ question }) => question.format)).toContain('constraint-signals')
+    expect(onboardingDecisions.map(({ question }) => question.format)).toContain('operation-contract')
     expect(onboardingDecisions.every(({ problem }) => problem.description.length > 0)).toBe(true)
     expect(onboardingDecisions.every(({ problem }) => problem.examples.every((example) => example.input.length > 0 && example.output.length > 0))).toBe(true)
   })

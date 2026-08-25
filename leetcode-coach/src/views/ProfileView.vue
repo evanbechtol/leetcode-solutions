@@ -159,6 +159,16 @@ async function openRepair(lessonSlug: string, repairId: string) {
       </div>
     </v-card>
 
+    <v-card class="analytics-card format-analytics pa-6 pa-md-7 mt-4">
+      <div class="section-heading"><div><span class="eyebrow">Intuition evidence</span><h2>Accuracy by reasoning skill</h2><p class="section-copy">These signals separate noticing a constraint, deriving the needed state, and transferring the reasoning to a changed problem.</p></div></div>
+      <div class="format-stat-grid mt-6">
+        <article v-for="stat in store.reasoningSkillStats" :key="stat.skill" class="format-stat">
+          <v-icon icon="mdi-head-lightbulb-outline" />
+          <div><span>{{ stat.label }}</span><strong>{{ stat.total ? `${stat.accuracy}%` : '—' }}</strong><small>{{ stat.correct }} correct · {{ stat.total }} attempts<span v-if="stat.highConfidenceErrors"> · {{ stat.highConfidenceErrors }} high-confidence {{ stat.highConfidenceErrors === 1 ? 'miss' : 'misses' }}</span></small></div>
+        </article>
+      </div>
+    </v-card>
+
     <v-card class="analytics-card mastery-card pa-6 pa-md-7 mt-4">
       <div class="section-heading"><div><span class="eyebrow">Problem-set mastery</span><h2>Core interview tracks</h2><p class="section-copy">A topic is mastered only after every problem in its loaded set is completed.</p></div><v-chip color="primary" variant="tonal" size="small">{{ store.topicMastery.filter(track => track.mastered).length }} mastered</v-chip></div>
       <div class="mastery-grid mt-6">

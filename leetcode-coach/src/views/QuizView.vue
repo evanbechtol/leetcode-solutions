@@ -11,11 +11,11 @@ import rust from 'highlight.js/lib/languages/rust'
 import { useTrainerStore } from '../stores/trainer'
 import { useCodeLanguagePreference } from '../composables/useCodeLanguagePreference'
 import FilterPanel from '../components/FilterPanel.vue'
-import AlgorithmBuilderQuestion from '../components/questions/AlgorithmBuilderQuestion.vue'
-import CodeConstructionQuestion from '../components/questions/CodeConstructionQuestion.vue'
-import { incorrectFeedbackFor, shouldRevealCorrectChoice } from '../utils/quizFeedback'
+import { questionComponentFor } from '../components/questions/registry'
+import { incorrectFeedbackFor } from '../utils/quizFeedback'
 import { parseProblemRouteId, problemRoutePath } from '../utils/problemRoutes'
-import type { QuestionInteractionState } from '../types'
+import { questionOptions } from '../utils/questionConfig'
+import type { QuestionInteractionResult, QuestionInteractionState } from '../types'
 
 hljs.registerLanguage('typescript', typescript)
 hljs.registerLanguage('javascript', javascript)
@@ -38,9 +38,7 @@ const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_
 const dailyTaskId = computed(() => typeof route.query.dailyTask === 'string' ? route.query.dailyTask : null)
 const questionPanel = ref<HTMLElement | null>(null)
 const interactionKey = ref(0)
-const interactionResponse = ref<{ ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState | null }>({
-  ready: false, correct: false, feedback: '', state: null,
-})
+const interactionResponse = ref<QuestionInteractionResult | null>(null)
 const { preferredLanguage, setPreferredLanguage } = useCodeLanguagePreference()
 
 const progress = computed(() => store.currentProblem
@@ -55,23 +53,54 @@ const hasIdentifiedDataStructure = computed(() => {
   return store.currentQuestionIndex > index
     || (store.currentQuestionIndex === index && store.submitted && store.answerCorrect === true)
 })
-const isMultipleChoice = computed(() => currentFormat.value === 'multiple-choice')
 const isCorrect = computed(() => store.submitted && store.answerCorrect === true)
-const revealCorrectChoice = computed(() => shouldRevealCorrectChoice(store.submitted, isCorrect.value))
-const canSubmit = computed(() => isMultipleChoice.value ? store.selectedAnswer !== null : interactionResponse.value.ready)
+const canSubmit = computed(() => interactionResponse.value?.complete ?? false)
+const currentQuestionComponent = computed(() => questionComponentFor(currentFormat.value))
+const formatPresentation = computed(() => ({
+  'multiple-choice': { label: '', icon: 'mdi-lightbulb-on-outline' },
+  'algorithm-builder': { label: 'Build', icon: 'mdi-code-braces' },
+  'iteration-visualization': { label: 'Visualize', icon: 'mdi-motion-play-outline' },
+  'code-construction': { label: 'Construct', icon: 'mdi-code-braces' },
+  'constraint-signals': { label: 'Notice', icon: 'mdi-text-search' },
+  'operation-contract': { label: 'Derive', icon: 'mdi-function-variant' },
+  'state-sufficiency': { label: 'Remember', icon: 'mdi-database-outline' },
+  'near-twin': { label: 'Contrast', icon: 'mdi-compare' },
+  'constraint-mutation': { label: 'Adapt', icon: 'mdi-file-compare' },
+  'structural-analogy': { label: 'Transfer', icon: 'mdi-transit-connection-variant' },
+}[currentFormat.value]))
+const initialInteractionState = computed<QuestionInteractionState | null>(() => store.interactionState
+  ?? (currentFormat.value === 'multiple-choice' ? { format: 'multiple-choice', selectedAnswer: store.selectedAnswer } : null))
 const revealedHints = computed(() => store.currentQuestion?.hintLevels?.slice(0, store.revealedHintCount) ?? [])
 const hasMoreHints = computed(() => store.revealedHintCount < (store.currentQuestion?.hintLevels?.length ?? 0))
+const showConfidence = computed(() => currentFormat.value !== 'code-construction' && currentFormat.value !== 'algorithm-builder')
+const confidenceOptions = [
+  { value: 'low' as const, label: 'Not sure' },
+  { value: 'medium' as const, label: 'Somewhat sure' },
+  { value: 'high' as const, label: 'Very sure' },
+]
 const actionInstruction = computed(() => ({
   'multiple-choice': 'Select the strongest answer',
   'algorithm-builder': 'Place all four steps in order',
   'code-construction': 'Complete each implementation decision',
   'iteration-visualization': 'Run every frame, then answer the checkpoint',
+  'constraint-signals': 'Map every contract phrase to its consequence',
+  'operation-contract': 'Derive the required operations before choosing state',
+  'state-sufficiency': 'Classify every piece of past information',
+  'near-twin': 'Compare the contracts and identify the decisive change',
+  'constraint-mutation': 'Classify how the changed constraint affects each part',
+  'structural-analogy': 'Map every abstract role across both problems',
 }[currentFormat.value]))
 const checkLabel = computed(() => ({
   'multiple-choice': 'Check reasoning',
   'algorithm-builder': 'Check sequence',
   'code-construction': 'Finish constructing the code',
   'iteration-visualization': 'Check trace',
+  'constraint-signals': 'Check signal mapping',
+  'operation-contract': 'Check operation contract',
+  'state-sufficiency': 'Check maintained state',
+  'near-twin': 'Check pattern boundary',
+  'constraint-mutation': 'Check adaptation',
+  'structural-analogy': 'Check structural mapping',
 }[currentFormat.value]))
 const codeSamples = computed<Record<string, string>>(() => {
   if (!store.currentProblem) return {}
@@ -105,13 +134,14 @@ function scrollQuestionToTop() {
 }
 
 function resetInteraction() {
-  interactionResponse.value = { ready: false, correct: false, feedback: '', state: null }
+  interactionResponse.value = null
   interactionKey.value++
 }
 
-function updateInteraction(response: { ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState }) {
+function updateInteraction(response: QuestionInteractionResult) {
   interactionResponse.value = response
   store.setInteractionState(response.state)
+  if (response.state.format === 'multiple-choice') store.selectedAnswer = response.state.selectedAnswer
   if (store.submitted && store.answerCorrect === false) aiHint.value = response.feedback
 }
 
@@ -199,16 +229,14 @@ onBeforeRouteLeave(() => {
 })
 
 async function checkAnswer() {
-  const correct = isMultipleChoice.value
-    ? store.submitAnswer()
-    : store.submitEvaluatedAnswer(interactionResponse.value.correct)
+  if (!interactionResponse.value) return
+  const correct = store.submitInteraction(interactionResponse.value)
   aiHint.value = ''
   if (correct !== false || !store.currentProblem || !store.currentQuestion) return
-  if (isMultipleChoice.value && store.selectedAnswer === null) return
   if (store.currentQuestion.id.includes(':static-v') || !aiCoachEnabled) {
-    aiHint.value = isMultipleChoice.value && store.selectedAnswer !== null
+    aiHint.value = currentFormat.value === 'multiple-choice' && store.selectedAnswer !== null
       ? incorrectFeedbackFor(store.currentQuestion, store.selectedAnswer)
-      : interactionResponse.value.feedback
+      : interactionResponse.value?.feedback ?? store.currentQuestion.hint
     return
   }
   hintLoading.value = true
@@ -220,8 +248,8 @@ async function checkAnswer() {
       body: JSON.stringify({
         problem: { title: store.currentProblem.title, description: store.currentProblem.description, constraints: store.currentProblem.constraints },
         question: store.currentQuestion.prompt,
-        options: store.currentQuestion.options,
-        selectedOption: store.currentQuestion.options[store.selectedAnswer!],
+        options: questionOptions(store.currentQuestion),
+        selectedOption: questionOptions(store.currentQuestion)[store.selectedAnswer ?? -1] ?? JSON.stringify(interactionResponse.value.evidence),
         questionType: store.currentQuestion.type,
       }),
     })
@@ -329,9 +357,9 @@ async function copySolution() {
           </div>
           <v-card class="question-card pa-6 pa-md-9">
             <div class="question-type">
-              <v-icon :icon="['algorithm-builder', 'code-construction'].includes(currentFormat) ? 'mdi-code-braces' : currentFormat === 'iteration-visualization' ? 'mdi-motion-play-outline' : 'mdi-lightbulb-on-outline'" size="18" />
+              <v-icon :icon="formatPresentation.icon" size="18" />
               {{ store.currentQuestion?.type }}
-              <span v-if="currentFormat !== 'multiple-choice'">· {{ currentFormat === 'algorithm-builder' ? 'Build' : currentFormat === 'code-construction' ? 'Construct' : 'Visualize' }}</span>
+              <span v-if="formatPresentation.label">· {{ formatPresentation.label }}</span>
             </div>
             <div v-if="store.currentQuestion?.teachingContext" class="teaching-context mt-5">
               <span>Before you answer</span>
@@ -339,43 +367,15 @@ async function copySolution() {
               <p>{{ store.currentQuestion.teachingContext.body }}</p>
             </div>
             <h2>{{ store.currentQuestion?.prompt }}</h2>
-            <AlgorithmBuilderQuestion
-              v-if="currentFormat === 'algorithm-builder' && store.currentQuestion"
+            <component
+              :is="currentQuestionComponent"
+              v-if="store.currentQuestion"
               :key="interactionKey"
               :question="store.currentQuestion"
               :submitted="store.submitted"
-              :initial-state="store.interactionState"
+              :initial-state="initialInteractionState"
               @response-change="updateInteraction"
             />
-            <CodeConstructionQuestion
-              v-else-if="currentFormat === 'code-construction' && store.currentQuestion"
-              :key="interactionKey"
-              :question="store.currentQuestion"
-              :submitted="store.submitted"
-              :initial-state="store.interactionState"
-              @response-change="updateInteraction"
-            />
-            <div v-else class="answer-list mt-7" role="radiogroup" :aria-label="store.currentQuestion?.prompt">
-              <button
-                v-for="(option, index) in store.currentQuestion?.options"
-                :key="option"
-                class="answer-option"
-                :class="{
-                  selected: store.selectedAnswer === index,
-                  correct: revealCorrectChoice && index === store.currentQuestion?.answer,
-                  wrong: store.submitted && store.selectedAnswer === index && index !== store.currentQuestion?.answer,
-                }"
-                :disabled="store.submitted"
-                role="radio"
-                :aria-checked="store.selectedAnswer === index"
-                @click="store.selectedAnswer = index"
-              >
-                <span class="option-key">{{ String.fromCharCode(65 + index) }}</span>
-                <span>{{ option }}</span>
-                <v-icon v-if="revealCorrectChoice && index === store.currentQuestion?.answer" icon="mdi-check-circle" color="success" />
-                <v-icon v-else-if="store.submitted && store.selectedAnswer === index" icon="mdi-close-circle" color="error" />
-              </button>
-            </div>
 
             <v-expand-transition>
               <div v-if="store.submitted" class="feedback mt-6" :class="isCorrect ? 'feedback-correct' : 'feedback-wrong'">
@@ -399,6 +399,13 @@ async function copySolution() {
                 </div>
               </div>
             </v-expand-transition>
+
+            <div v-if="!store.submitted && canSubmit && showConfidence" class="confidence-check mt-6">
+              <div><strong>How sure are you?</strong><span>This helps choose later practice. It does not change your score.</span></div>
+              <div role="radiogroup" aria-label="Answer confidence">
+                <button v-for="option in confidenceOptions" :key="option.value" type="button" role="radio" :aria-checked="store.confidence === option.value" :class="{ selected: store.confidence === option.value }" @click="store.confidence = option.value">{{ option.label }}</button>
+              </div>
+            </div>
 
             <div class="question-actions mt-7">
               <span v-if="!store.submitted" class="keyboard-note">{{ actionInstruction }}</span>

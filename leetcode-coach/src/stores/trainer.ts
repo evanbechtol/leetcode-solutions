@@ -3,13 +3,16 @@ import { defineStore } from 'pinia'
 import { problems } from '../data/problems'
 import { learningTracks } from '../data/tracks'
 import { COACHING_CONTENT_VERSION } from '../data/coaching/contentVersion'
+import { compilePilotTransferQuestions } from '../data/coaching/intuitionCompiler'
 import { categoryRepairLink } from '../data/repairMetadata'
-import type { AnswerRecord, Filters, ProblemResult, QuestionFormat, QuestionInteractionState, QuestionType, QuizQuestion } from '../types'
+import type { AnswerRecord, ConfidenceLevel, Filters, ProblemResult, QuestionFormat, QuestionInteractionResult, QuestionInteractionState, QuestionType, QuizQuestion } from '../types'
 import { drawRandomProblem } from '../utils/randomSelection'
 import { hasDataStructureGateBeforeAlgorithms, sequenceDataStructureBeforeAlgorithms } from '../utils/questionSequence'
-import { ACTIVE_PROBLEM_SESSION_KEY, parseActiveProblemSession } from '../utils/activeProblemSession'
+import { ACTIVE_PROBLEM_SESSION_KEY, ACTIVE_PROBLEM_SESSION_VERSION, parseActiveProblemSession, questionPathFromActiveSession } from '../utils/activeProblemSession'
 import { consistencyFor, planDailyTasks, taskForId, type DailyTask } from '../utils/dailySession'
 import { dueRepairCardsFor, repairCardsFor, repairTaskFor } from '../utils/repairSelectors'
+import { questionAnswer, questionMisconceptionLinks } from '../utils/questionConfig'
+import { repairStageForDiagnostics, selectAdaptiveQuestionPath } from '../utils/adaptiveQuestions'
 import {
   PROGRESS_V1_STORAGE_KEY,
   PROGRESS_V2_STORAGE_KEY,
@@ -38,12 +41,30 @@ export const QUESTION_FORMATS: Array<{ format: QuestionFormat; label: string }> 
   { format: 'multiple-choice', label: 'Decision questions' },
   { format: 'algorithm-builder', label: 'Build the algorithm' },
   { format: 'code-construction', label: 'Construct the code' },
+  { format: 'constraint-signals', label: 'Constraint signals' },
+  { format: 'operation-contract', label: 'Operation contracts' },
+  { format: 'state-sufficiency', label: 'Minimal state' },
+  { format: 'near-twin', label: 'Pattern boundaries' },
+  { format: 'constraint-mutation', label: 'Constraint transfer' },
+  { format: 'structural-analogy', label: 'Structural analogies' },
 ]
+const REASONING_SKILL_LABELS = {
+  'constraint-signal': 'Constraint signals',
+  'operation-requirement': 'Required operations',
+  'state-sufficiency': 'State sufficiency',
+  'safe-discard': 'Safe forgetting',
+  'pattern-boundary': 'Pattern boundaries',
+  'counterfactual-transfer': 'Constraint adaptation',
+  'structural-analogy': 'Structural analogy',
+} as const
 
 const progressContentIndex: ProgressContentIndex = {
   problemTopics: Object.fromEntries(problems.map((problem) => [problem.id, [...problem.topics]])),
   knownProblemIds: new Set(problems.map(({ id }) => id)),
-  knownQuestionIds: Object.fromEntries(problems.map((problem) => [problem.id, new Set(problem.questions.map(({ id }) => id))])),
+  knownQuestionIds: Object.fromEntries(problems.map((problem) => [problem.id, new Set([
+    ...problem.questions.map(({ id }) => id),
+    ...compilePilotTransferQuestions(problem).map(({ id }) => id),
+  ])])),
 }
 
 const localStorageFor = (): StorageLike => globalThis.localStorage as StorageLike
@@ -104,6 +125,7 @@ export const useTrainerStore = defineStore('trainer', () => {
   const answerCorrect = ref<boolean | null>(null)
   const firstTryCorrect = ref(0)
   const revealedHintCount = ref(0)
+  const confidence = ref<ConfidenceLevel | null>(null)
   const attemptedCurrent = ref(new Set<string>())
   const interactionState = ref<QuestionInteractionState | null>(null)
   const problemComplete = ref(false)
@@ -159,6 +181,12 @@ export const useTrainerStore = defineStore('trainer', () => {
     const correct = relevant.filter((answer) => answer.correct).length
     return { format, label, correct, total: relevant.length, accuracy: relevant.length ? Math.round((correct / relevant.length) * 100) : 0 }
   }))
+  const reasoningSkillStats = computed(() => Object.entries(REASONING_SKILL_LABELS).map(([skill, label]) => {
+    const relevant = progressState.value.attempts.filter((attempt) => attempt.reasoningSkillKeys.includes(skill as keyof typeof REASONING_SKILL_LABELS))
+    const correct = relevant.filter((attempt) => attempt.correct).length
+    const highConfidenceErrors = relevant.filter((attempt) => !attempt.correct && attempt.confidence === 'high').length
+    return { skill, label, correct, total: relevant.length, accuracy: relevant.length ? Math.round((correct / relevant.length) * 100) : 0, highConfidenceErrors }
+  }))
   const topicMastery = computed(() => {
     const coreTopics = ['Array', 'String', 'Hash Table', 'Linked List', 'Tree', 'Graph', 'Dynamic Programming', 'Heap']
     return coreTopics.map((topic) => {
@@ -201,6 +229,7 @@ export const useTrainerStore = defineStore('trainer', () => {
     answerCorrect,
     firstTryCorrect,
     revealedHintCount,
+    confidence,
     attemptedCurrent,
     interactionState,
     problemComplete,
@@ -208,15 +237,18 @@ export const useTrainerStore = defineStore('trainer', () => {
   ], () => {
     if (currentProblemId.value === null || !currentQuestion.value) return
     storage.setItem(ACTIVE_PROBLEM_SESSION_KEY, JSON.stringify({
-      version: 1,
+      version: ACTIVE_PROBLEM_SESSION_VERSION,
+      contentVersion: COACHING_CONTENT_VERSION,
       problemId: currentProblemId.value,
       questionId: currentQuestion.value.id,
+      questionIds: activeQuestions.value.map(({ id }) => id),
       questionIndex: currentQuestionIndex.value,
       selectedAnswer: selectedAnswer.value,
       submitted: submitted.value,
       answerCorrect: answerCorrect.value,
       firstTryCorrect: firstTryCorrect.value,
       revealedHintCount: revealedHintCount.value,
+      confidence: confidence.value,
       attemptedQuestionIds: [...attemptedCurrent.value],
       interactionState: interactionState.value,
       completed: problemComplete.value,
@@ -230,8 +262,9 @@ export const useTrainerStore = defineStore('trainer', () => {
 
   function openRepairForAttempt(attempt: ProgressStateV2['attempts'][number], problem = currentProblem.value, question = currentQuestion.value) {
     if (!problem || !question) return
-    const link = question.misconceptionLinks?.[attempt.selectedOptionIndex ?? -1]
-      ?? categoryRepairLink(problem, question.stage)
+    const repairStage = repairStageForDiagnostics(attempt.diagnosticKeys) ?? question.stage
+    const link = questionMisconceptionLinks(question)[attempt.selectedOptionIndex ?? -1]
+      ?? categoryRepairLink(problem, repairStage)
     const existing = progressState.value.repairs.find((repair) => repair.misconceptionKey === link.key)
     if (existing) {
       existing.sourceAttemptId = attempt.id
@@ -271,7 +304,7 @@ export const useTrainerStore = defineStore('trainer', () => {
     if (!repairId || !dailyTaskId?.startsWith('repair-retrieval:') || !problem || !question || !attempt.correct || !attempt.firstAttempt) return
     const repair = progressState.value.repairs.find(({ id }) => id === repairId)
     const sourceAttempt = repair && progressState.value.attempts.find(({ id }) => id === repair.sourceAttemptId)
-    const currentLink = question.misconceptionLinks?.[attempt.selectedOptionIndex ?? -1]
+    const currentLink = questionMisconceptionLinks(question)[attempt.selectedOptionIndex ?? -1]
       ?? categoryRepairLink(problem, question.stage)
     if (!repair || !sourceAttempt || repair.status !== 'revisited') return
     if (attempt.localDay <= sourceAttempt.localDay || (attempt.problemId === sourceAttempt.problemId && attempt.questionId === sourceAttempt.questionId)) return
@@ -304,14 +337,30 @@ export const useTrainerStore = defineStore('trainer', () => {
   }
 
   function recordOnboardingAnswer(problemId: number, question: QuizQuestion, selectedOptionIndex: number) {
+    return recordOnboardingInteraction(problemId, question, {
+      complete: true,
+      correct: selectedOptionIndex === questionAnswer(question),
+      firstAttempt: true,
+      hintLevelReached: 0,
+      diagnosticKeys: selectedOptionIndex === questionAnswer(question) ? [] : [`multiple-choice:${selectedOptionIndex}`],
+      evidence: { selectedAnswer: selectedOptionIndex },
+      feedback: '',
+      state: { format: 'multiple-choice', selectedAnswer: selectedOptionIndex },
+    })
+  }
+
+  function recordOnboardingInteraction(problemId: number, question: QuizQuestion, result: QuestionInteractionResult) {
     const startedAt = progressState.value.learner.onboardingStartedAt
     const savedAttempt = progressState.value.attempts.find((attempt) => attempt.source === 'onboarding'
       && attempt.problemId === problemId
       && attempt.questionId === question.id
       && (!startedAt || attempt.occurredAt >= startedAt))
     if (savedAttempt) return savedAttempt.correct
-    const correct = selectedOptionIndex === question.answer
+    const correct = result.correct
     const firstAttempt = !progressState.value.attempts.some((attempt) => attempt.problemId === problemId && attempt.questionId === question.id)
+    const selectedOptionIndex = result.state.format === 'multiple-choice' || result.state.format === 'iteration-visualization'
+      ? result.state.selectedAnswer ?? undefined
+      : undefined
     const attempt = createAttempt({
       problemId,
       questionId: question.id,
@@ -322,9 +371,13 @@ export const useTrainerStore = defineStore('trainer', () => {
       correct,
       firstAttempt,
       hintLevelReached: 0,
-      contentVersion: COACHING_CONTENT_VERSION,
+      contentVersion: question.contentVersion,
       source: 'onboarding',
       topicKeys: [...(problems.find((problem) => problem.id === problemId)?.topics ?? [])],
+      reasoningSkillKeys: [...question.reasoningSkillKeys],
+      instructionalLevel: question.instructionalLevel,
+      diagnosticKeys: [...result.diagnosticKeys],
+      evidence: result.evidence,
     })
     progressState.value.attempts.push(attempt)
     recordProductEvent('onboarding_decision_answered', { problemId, correct })
@@ -455,6 +508,7 @@ export const useTrainerStore = defineStore('trainer', () => {
     answerCorrect.value = null
     firstTryCorrect.value = 0
     revealedHintCount.value = 0
+    confidence.value = null
     attemptedCurrent.value = new Set()
     interactionState.value = null
     problemComplete.value = false
@@ -463,8 +517,12 @@ export const useTrainerStore = defineStore('trainer', () => {
   function initializeProblem(problemId: number) {
     const selected = availableProblems.value.find((problem) => problem.id === problemId)
     if (!selected) return false
-    const questions = selected.questions.length ? selected.questions : (quizCache.value[selected.id] || [])
     const rawSession = storage.getItem(ACTIVE_PROBLEM_SESSION_KEY)
+    const baseQuestions = selected.questions.length ? selected.questions : (quizCache.value[selected.id] || [])
+    const transferQuestions = compilePilotTransferQuestions(selected)
+    const restoredPath = questionPathFromActiveSession(rawSession, selected.id, [...baseQuestions, ...transferQuestions])
+    const dailySession = Boolean(todayTasks.value.find((task) => task.problemId === selected.id && !task.completed))
+    const questions = restoredPath ?? selectAdaptiveQuestionPath(baseQuestions, transferQuestions, progressState.value.attempts, { dailySession })
     const restored = parseActiveProblemSession(rawSession, selected.id, questions)
     if (rawSession && !restored) storage.removeItem(ACTIVE_PROBLEM_SESSION_KEY)
 
@@ -478,6 +536,7 @@ export const useTrainerStore = defineStore('trainer', () => {
       answerCorrect.value = restored.answerCorrect
       firstTryCorrect.value = restored.firstTryCorrect
       revealedHintCount.value = restored.revealedHintCount
+      confidence.value = restored.confidence
       attemptedCurrent.value = new Set(restored.attemptedQuestionIds)
       interactionState.value = restored.interactionState
       problemComplete.value = restored.completed
@@ -526,7 +585,7 @@ export const useTrainerStore = defineStore('trainer', () => {
     return true
   }
 
-  function recordAnswer(correct: boolean, selectedOptionIndex?: number) {
+  function recordAnswer(correct: boolean, selectedOptionIndex?: number, result?: QuestionInteractionResult) {
     if (!currentProblem.value || !currentQuestion.value || submitted.value) return null
     const key = `${currentProblem.value.id}:${currentQuestion.value.id}`
     const firstAttempt = !attemptedCurrent.value.has(key)
@@ -542,9 +601,14 @@ export const useTrainerStore = defineStore('trainer', () => {
       correct,
       firstAttempt,
       hintLevelReached: Math.min(revealedHintCount.value, 3) as 0 | 1 | 2 | 3,
-      contentVersion: COACHING_CONTENT_VERSION,
+      confidence: confidence.value ?? undefined,
+      contentVersion: currentQuestion.value.contentVersion,
       source: dailyTaskId ? 'daily-session' : 'practice',
       topicKeys: [...currentProblem.value.topics],
+      reasoningSkillKeys: [...currentQuestion.value.reasoningSkillKeys],
+      instructionalLevel: currentQuestion.value.instructionalLevel,
+      diagnosticKeys: [...(result?.diagnosticKeys ?? [])],
+      evidence: result?.evidence ?? {},
     })
     progressState.value.attempts.push(attempt)
     if (!correct) openRepairForAttempt(attempt)
@@ -564,20 +628,31 @@ export const useTrainerStore = defineStore('trainer', () => {
 
   function submitAnswer() {
     if (selectedAnswer.value === null || !currentProblem.value || !currentQuestion.value) return null
-    return recordAnswer(selectedAnswer.value === currentQuestion.value.answer, selectedAnswer.value)
+    return recordAnswer(selectedAnswer.value === questionAnswer(currentQuestion.value), selectedAnswer.value)
   }
 
   function submitEvaluatedAnswer(correct: boolean) {
     return recordAnswer(correct)
   }
 
+  function submitInteraction(result: QuestionInteractionResult) {
+    if (!result.complete) return null
+    const selectedOptionIndex = result.state.format === 'multiple-choice' || result.state.format === 'iteration-visualization'
+      ? result.state.selectedAnswer ?? undefined
+      : undefined
+    return recordAnswer(result.correct, selectedOptionIndex, result)
+  }
+
   function tryAgain() {
     selectedAnswer.value = null
+    confidence.value = null
     submitted.value = false
     answerCorrect.value = null
-    interactionState.value = interactionState.value?.format === 'code-construction'
-      ? { ...interactionState.value, selectedChoiceId: null, lastCheckedChoiceId: null }
-      : null
+    interactionState.value = interactionState.value?.format === 'multiple-choice'
+      ? null
+      : interactionState.value?.format === 'code-construction'
+        ? { ...interactionState.value, selectedChoiceId: null, lastCheckedChoiceId: null }
+        : interactionState.value
   }
 
   function setInteractionState(state: QuestionInteractionState | null) {
@@ -597,6 +672,7 @@ export const useTrainerStore = defineStore('trainer', () => {
       submitted.value = false
       answerCorrect.value = null
       revealedHintCount.value = 0
+      confidence.value = null
       interactionState.value = null
       return true
     }
@@ -644,12 +720,12 @@ export const useTrainerStore = defineStore('trainer', () => {
   return {
     answers, results, streak, bestStreak, progressState, progressRecovery, progressMigrationStatus, progressStorageError,
     currentProblemId, currentQuestionIndex, selectedAnswer, submitted, answerCorrect,
-    firstTryCorrect, revealedHintCount, interactionState, problemComplete, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
-    totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, topicMastery, aiCoachEnabled, catalogSize: problems.length,
+    firstTryCorrect, revealedHintCount, confidence, interactionState, problemComplete, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
+    totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, reasoningSkillStats, topicMastery, aiCoachEnabled, catalogSize: problems.length,
     todaySession, todayTasks, practiceConsistency, repairCards, dueRepairCards,
-    startProblem, pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, tryAgain,
+    startProblem, pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, submitInteraction, tryAgain,
     setInteractionState, revealNextHint, nextQuestion, resetProgress, exportProgressData, exportRecoveryData, importProgressData, recordProductEvent,
-    updateLearnerProfile, beginOnboarding, recordOnboardingAnswer, advanceOnboardingDecision, completeOnboarding, skipOnboarding, restartOnboarding,
+    updateLearnerProfile, beginOnboarding, recordOnboardingAnswer, recordOnboardingInteraction, advanceOnboardingDecision, completeOnboarding, skipOnboarding, restartOnboarding,
     ensureTodaySession, beginDailyTask, completeDailyTask, rebuildTodaySession, snoozeRepair,
   }
 })

@@ -3,8 +3,9 @@ import type { QuizQuestion } from '../types'
 import { incorrectFeedbackFor, shouldRevealCorrectChoice } from './quizFeedback'
 
 const sample: QuizQuestion = {
-  id: '1:static-v1:pattern', type: 'Pattern', prompt: 'Prompt', options: ['A', 'B', 'C', 'D'], answer: 2,
-  explanation: 'Correct explanation', hint: 'Leading hint', optionFeedback: ['A misses', 'B misses', 'Correct explanation', 'D misses'],
+  id: '1:static-v1:pattern', type: 'Pattern', format: 'multiple-choice', prompt: 'Prompt',
+  explanation: 'Correct explanation', hint: 'Leading hint', reasoningSkillKeys: ['behavioral-pattern-recognition'], instructionalLevel: 'complete', contentVersion: 'test',
+  config: { options: ['A', 'B', 'C', 'D'], answer: 2, optionFeedback: ['A misses', 'B misses', 'Correct explanation', 'D misses'], misconceptionLinks: [undefined, undefined, undefined, undefined] },
 }
 
 describe('quiz feedback disclosure', () => {

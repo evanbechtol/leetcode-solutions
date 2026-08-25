@@ -1,4 +1,5 @@
 export type Difficulty = 'Easy' | 'Medium' | 'Hard'
+
 export type QuestionType =
   | 'Comprehension'
   | 'Pattern'
@@ -9,7 +10,21 @@ export type QuestionType =
   | 'Complexity'
 
 export type LegacyQuestionType = 'Time Complexity' | 'Space Complexity'
-export type QuestionFormat = 'multiple-choice' | 'algorithm-builder' | 'iteration-visualization' | 'code-construction'
+
+export const QUESTION_FORMATS = [
+  'multiple-choice',
+  'algorithm-builder',
+  'iteration-visualization',
+  'code-construction',
+  'constraint-signals',
+  'operation-contract',
+  'state-sufficiency',
+  'near-twin',
+  'constraint-mutation',
+  'structural-analogy',
+] as const
+
+export type QuestionFormat = typeof QUESTION_FORMATS[number]
 
 export type QuestionStage =
   | 'contract'
@@ -26,6 +41,78 @@ export type QuestionStage =
   | 'time-complexity'
   | 'space-complexity'
   | 'tradeoff'
+
+export type ReasoningSkillKey =
+  | 'constraint-signal'
+  | 'runtime-feasibility'
+  | 'operation-requirement'
+  | 'state-sufficiency'
+  | 'safe-discard'
+  | 'pattern-boundary'
+  | 'counterfactual-transfer'
+  | 'structural-analogy'
+  | 'representation-generation'
+  | 'derivation-completion'
+  | 'monotonicity'
+  | 'greedy-safety'
+  | 'worst-case-construction'
+  | 'behavioral-pattern-recognition'
+  | 'proof-structure'
+
+export type InstructionalLevel = 'observe' | 'complete' | 'construct' | 'retrieve' | 'transfer'
+export type ConfidenceLevel = 'low' | 'medium' | 'high'
+
+export interface TeachingContext {
+  title: string
+  body: string
+}
+
+export interface FormalTerm {
+  name: string
+  definition: string
+}
+
+export interface HintLevel {
+  id: 'cue' | 'concept' | 'worked-step'
+  label: string
+  text: string
+}
+
+export type RepairMode = 'lesson' | 'trace' | 'retry' | 'transfer'
+
+export interface MisconceptionLink {
+  key: string
+  label: string
+  conceptKey: string
+  lessonSlug: string
+  repairMode: RepairMode
+  specificity: 'reviewed-option' | 'category'
+}
+
+export interface BaseQuestion {
+  id: string
+  type: QuestionType | LegacyQuestionType
+  format: QuestionFormat
+  stage?: QuestionStage
+  prompt: string
+  explanation: string
+  hint: string
+  hintLevels?: HintLevel[]
+  prerequisites?: QuestionStage[]
+  readingLevelNotes?: string[]
+  teachingContext?: TeachingContext
+  formalTerm?: FormalTerm
+  reasoningSkillKeys: ReasoningSkillKey[]
+  instructionalLevel: InstructionalLevel
+  contentVersion: string
+}
+
+export interface MultipleChoiceConfig {
+  options: string[]
+  answer: number
+  optionFeedback: string[]
+  misconceptionLinks: Array<MisconceptionLink | undefined>
+}
 
 export interface AlgorithmBuildStep {
   id: string
@@ -103,6 +190,174 @@ export interface IterationVisualizationConfig {
   code: string
   language: string
   frames: VisualizationFrame[]
+  checkpoint: MultipleChoiceConfig
+}
+
+export interface ConstraintSignalConfig {
+  sourceText: string
+  signals: Array<{
+    id: string
+    label: string
+    importance: 'decisive' | 'supporting' | 'incidental'
+    consequenceIds: string[]
+  }>
+  consequences: Array<{
+    id: string
+    text: string
+    feedback: string
+  }>
+}
+
+export interface OperationContractConfig {
+  operationOptions: Array<{
+    id: string
+    label: string
+    required: boolean
+    feedback: string
+  }>
+  structures: Array<{
+    id: string
+    label: string
+    satisfiesOperationIds: string[]
+    tradeoff: string
+  }>
+  correctStructureIds: string[]
+}
+
+export type StateItemClassification = 'required' | 'optional-redundant' | 'discardable'
+
+export interface StateSufficiencyConfig {
+  checkpoint: {
+    input: string
+    stateDescription: string
+  }
+  items: Array<{
+    id: string
+    label: string
+    classification: StateItemClassification
+    feedback: string
+  }>
+  minimalRequiredSets: string[][]
+  maxItems?: number
+}
+
+export interface MiniProblem {
+  title: string
+  contract: string
+}
+
+export interface NearTwinConfig {
+  baseProblem: MiniProblem
+  variantProblem: MiniProblem
+  changedFactIds: string[]
+  facts: Array<{ id: string; label: string; feedback: string }>
+  relationshipOptions: Array<{ id: string; label: string; feedback: string }>
+  correctRelationshipId: string
+  decisiveReasonIds: string[]
+}
+
+export type MutationImpactType = 'unchanged' | 'modified' | 'new' | 'invalidated'
+
+export interface ConstraintMutationConfig {
+  original: MiniProblem
+  mutation: {
+    label: string
+    removedText?: string[]
+    addedText?: string[]
+  }
+  aspects: Array<{
+    id: string
+    label: string
+    correctImpact: MutationImpactType
+    feedback: string
+  }>
+}
+
+export interface AnalogyChoice {
+  id: string
+  label: string
+}
+
+export interface StructuralAnalogyConfig {
+  problemA: MiniProblem
+  problemB: MiniProblem
+  roles: Array<{
+    id: string
+    label: string
+    problemAChoiceId: string
+    problemBChoiceId: string
+    explanation: string
+  }>
+  choicesA: AnalogyChoice[]
+  choicesB: AnalogyChoice[]
+  sharedFormalTerm?: FormalTerm
+}
+
+export interface MultipleChoiceQuestion extends BaseQuestion {
+  format: 'multiple-choice'
+  config: MultipleChoiceConfig
+}
+
+export interface AlgorithmBuilderQuestion extends BaseQuestion {
+  format: 'algorithm-builder'
+  config: AlgorithmBuilderConfig
+}
+
+export interface IterationVisualizationQuestion extends BaseQuestion {
+  format: 'iteration-visualization'
+  config: IterationVisualizationConfig
+}
+
+export interface CodeConstructionQuestion extends BaseQuestion {
+  format: 'code-construction'
+  config: CodeConstructionConfig
+}
+
+export interface ConstraintSignalQuestion extends BaseQuestion {
+  format: 'constraint-signals'
+  config: ConstraintSignalConfig
+}
+
+export interface OperationContractQuestion extends BaseQuestion {
+  format: 'operation-contract'
+  config: OperationContractConfig
+}
+
+export interface StateSufficiencyQuestion extends BaseQuestion {
+  format: 'state-sufficiency'
+  config: StateSufficiencyConfig
+}
+
+export interface NearTwinQuestion extends BaseQuestion {
+  format: 'near-twin'
+  config: NearTwinConfig
+}
+
+export interface ConstraintMutationQuestion extends BaseQuestion {
+  format: 'constraint-mutation'
+  config: ConstraintMutationConfig
+}
+
+export interface StructuralAnalogyQuestion extends BaseQuestion {
+  format: 'structural-analogy'
+  config: StructuralAnalogyConfig
+}
+
+export type QuizQuestion =
+  | MultipleChoiceQuestion
+  | AlgorithmBuilderQuestion
+  | IterationVisualizationQuestion
+  | CodeConstructionQuestion
+  | ConstraintSignalQuestion
+  | OperationContractQuestion
+  | StateSufficiencyQuestion
+  | NearTwinQuestion
+  | ConstraintMutationQuestion
+  | StructuralAnalogyQuestion
+
+export interface MultipleChoiceInteractionState {
+  format: 'multiple-choice'
+  selectedAnswer: number | null
 }
 
 export interface AlgorithmBuilderInteractionState {
@@ -124,55 +379,60 @@ export interface CodeConstructionInteractionState {
   lastCheckedChoiceId: string | null
 }
 
-export type QuestionInteractionState = AlgorithmBuilderInteractionState | IterationVisualizationInteractionState | CodeConstructionInteractionState
-
-export interface TeachingContext {
-  title: string
-  body: string
+export interface ConstraintSignalInteractionState {
+  format: 'constraint-signals'
+  mappings: Record<string, string | null>
 }
 
-export interface FormalTerm {
-  name: string
-  definition: string
+export interface OperationContractInteractionState {
+  format: 'operation-contract'
+  selectedOperationIds: string[]
+  selectedStructureId: string | null
+  operationsCommitted: boolean
 }
 
-export interface HintLevel {
-  id: 'cue' | 'concept' | 'worked-step'
-  label: string
-  text: string
+export interface StateSufficiencyInteractionState {
+  format: 'state-sufficiency'
+  classifications: Record<string, StateItemClassification>
 }
 
-export type RepairMode = 'lesson' | 'trace' | 'retry' | 'transfer'
-
-export interface MisconceptionLink {
-  key: string
-  label: string
-  conceptKey: string
-  lessonSlug: string
-  repairMode: RepairMode
-  specificity: 'reviewed-option' | 'category'
+export interface NearTwinInteractionState {
+  format: 'near-twin'
+  relationshipId: string | null
+  reasonIds: string[]
 }
 
-export interface QuizQuestion {
-  id: string
-  type: QuestionType | LegacyQuestionType
-  format?: QuestionFormat
-  stage?: QuestionStage
-  prompt: string
-  options: string[]
-  answer: number
-  explanation: string
-  hint: string
-  hintLevels?: HintLevel[]
-  prerequisites?: QuestionStage[]
-  readingLevelNotes?: string[]
-  teachingContext?: TeachingContext
-  formalTerm?: FormalTerm
-  optionFeedback?: string[]
-  misconceptionLinks?: Array<MisconceptionLink | undefined>
-  builder?: AlgorithmBuilderConfig
-  construction?: CodeConstructionConfig
-  visualization?: IterationVisualizationConfig
+export interface ConstraintMutationInteractionState {
+  format: 'constraint-mutation'
+  impacts: Record<string, MutationImpactType>
+}
+
+export interface StructuralAnalogyInteractionState {
+  format: 'structural-analogy'
+  mappings: Record<string, { problemAChoiceId: string; problemBChoiceId: string }>
+}
+
+export type QuestionInteractionState =
+  | MultipleChoiceInteractionState
+  | AlgorithmBuilderInteractionState
+  | IterationVisualizationInteractionState
+  | CodeConstructionInteractionState
+  | ConstraintSignalInteractionState
+  | OperationContractInteractionState
+  | StateSufficiencyInteractionState
+  | NearTwinInteractionState
+  | ConstraintMutationInteractionState
+  | StructuralAnalogyInteractionState
+
+export interface QuestionInteractionResult {
+  complete: boolean
+  correct: boolean
+  firstAttempt: boolean
+  hintLevelReached: 0 | 1 | 2 | 3
+  diagnosticKeys: string[]
+  evidence: Record<string, unknown>
+  feedback: string
+  state: QuestionInteractionState
 }
 
 export interface Problem {

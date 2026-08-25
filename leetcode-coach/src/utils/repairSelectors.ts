@@ -4,6 +4,9 @@ import { COACHING_CONTENT_VERSION } from '../data/coaching/contentVersion'
 import type { AttemptRecord, ProgressStateV2, RepairRecord } from '../stores/progress'
 import type { DailyTask } from './dailySession'
 import { learningTracks } from '../data/tracks'
+import { questionMisconceptionLinks, questionOptionFeedback } from './questionConfig'
+import { compilePilotTransferQuestions } from '../data/coaching/intuitionCompiler'
+import { repairStageForDiagnostics } from './adaptiveQuestions'
 
 export interface RepairCard {
   id: string
@@ -31,14 +34,14 @@ const sourceAttemptFor = (repair: RepairRecord, attempts: AttemptRecord[]) => at
 export const repairCardsFor = (state: ProgressStateV2, problems: Problem[], today: string): RepairCard[] => state.repairs.flatMap((repair) => {
   const attempt = sourceAttemptFor(repair, state.attempts)
   const problem = attempt && problems.find(({ id }) => id === attempt.problemId)
-  const question = problem?.questions.find(({ id }) => id === attempt?.questionId)
+  const question = problem && [...problem.questions, ...compilePilotTransferQuestions(problem)].find(({ id }) => id === attempt?.questionId)
   if (!attempt || !problem || !question) return []
 
-  const link = question.misconceptionLinks?.[attempt.selectedOptionIndex ?? -1]
-    ?? categoryRepairLink(problem, question.stage)
+  const link = questionMisconceptionLinks(question)[attempt.selectedOptionIndex ?? -1]
+    ?? categoryRepairLink(problem, repairStageForDiagnostics(attempt.diagnosticKeys) ?? question.stage)
   const contentUpdated = attempt.contentVersion !== COACHING_CONTENT_VERSION
   const why = !contentUpdated && attempt.selectedOptionIndex !== undefined
-    ? question.optionFeedback?.[attempt.selectedOptionIndex] || 'That choice does not preserve the information the next step needs.'
+    ? questionOptionFeedback(question)[attempt.selectedOptionIndex] || 'That choice does not preserve the information the next step needs.'
     : 'The current reviewed lesson explains this decision; the coaching content has been updated since this attempt.'
   const repeatCount = state.attempts.filter((candidate) => !candidate.correct && candidate.problemId === attempt.problemId && candidate.questionId === attempt.questionId).length
 

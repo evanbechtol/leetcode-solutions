@@ -1,20 +1,136 @@
-import type { Problem } from '../../types'
+import { QUESTION_FORMATS } from '../../types'
+import type { Problem, QuizQuestion } from '../../types'
+import { hasDataStructureGateBeforeAlgorithms } from '../../utils/questionSequence'
+import { lessons } from '../lessons'
+import { assembleConstructionCode } from './codeConstruction'
 import { compileQuestionPath } from './compiler'
+import { compilePilotCoreQuestions, compilePilotTransferQuestions } from './intuitionCompiler'
+import { INTUITION_PILOT_IDS, PILOT_REASONING_MODELS } from './intuitionFacts'
+import { beginnerPatternProfiles } from './beginnerProfiles'
 import { DEEP_PROBLEM_IDS, problemTeachingFacts } from './problemFacts'
 import { patternProfiles, rawTagPatternMap } from './patterns'
-import { beginnerPatternProfiles } from './beginnerProfiles'
-import { hasDataStructureGateBeforeAlgorithms } from '../../utils/questionSequence'
-import { assembleConstructionCode } from './codeConstruction'
-import { lessons } from '../lessons'
 
 const wordCount = (value: string) => value.trim().split(/\s+/).filter(Boolean).length
+const duplicates = (ids: string[]) => ids.filter((id, index) => ids.indexOf(id) !== index)
+const empty = (value: string) => !value.trim() || /TODO|placeholder/i.test(value)
+
+const validateQuestion = (question: QuizQuestion, problem: Problem, lessonSlugs: Set<string>) => {
+  const errors: string[] = []
+  const prefix = question.id
+  if (!QUESTION_FORMATS.includes(question.format)) errors.push(`${prefix}: unknown format.`)
+  if ([question.id, question.prompt, question.explanation, question.hint, question.contentVersion].some(empty)) errors.push(`${prefix}: empty or placeholder common content.`)
+  if (!question.reasoningSkillKeys.length) errors.push(`${prefix}: at least one reasoning skill is required.`)
+  if (!['observe', 'complete', 'construct', 'retrieve', 'transfer'].includes(question.instructionalLevel)) errors.push(`${prefix}: invalid instructional level.`)
+  if (question.hintLevels?.length !== 3 || new Set(question.hintLevels?.map(({ id }) => id)).size !== 3) errors.push(`${prefix}: the cue, relationship, and worked-step hint ladder is required.`)
+
+  switch (question.format) {
+    case 'multiple-choice': {
+      const { options, answer, optionFeedback, misconceptionLinks } = question.config
+      if (options.length !== 4 || new Set(options).size !== 4 || options.some(empty)) errors.push(`${prefix}: multiple choice requires four unique options.`)
+      if (answer < 0 || answer >= options.length) errors.push(`${prefix}: answer is out of bounds.`)
+      if (optionFeedback.length !== options.length || optionFeedback.some(empty)) errors.push(`${prefix}: every option needs feedback.`)
+      if (optionFeedback[answer] !== question.explanation) errors.push(`${prefix}: correct-option feedback must equal the consolidation explanation.`)
+      if (misconceptionLinks.length !== options.length) errors.push(`${prefix}: option-level repair metadata is incomplete.`)
+      if (misconceptionLinks.some((link, index) => index === answer ? link !== undefined : !link || !lessonSlugs.has(link.lessonSlug))) errors.push(`${prefix}: every distractor needs a valid repair destination.`)
+      if (DEEP_PROBLEM_IDS.has(problem.id) && misconceptionLinks.some((link, index) => index !== answer && link?.specificity !== 'reviewed-option')) errors.push(`${prefix}: deep paths require reviewed distractor diagnostics.`)
+      if (!['contract', 'time-complexity', 'space-complexity'].includes(question.stage ?? '') && options.some((option) => wordCount(option) > 32)) errors.push(`${prefix}: answer option exceeds 32 words.`)
+      if (question.hintLevels?.some(({ text }) => options.some((option) => text.trim().toLocaleLowerCase() === option.trim().toLocaleLowerCase()))) errors.push(`${prefix}: a hint directly reveals an option.`)
+      break
+    }
+    case 'algorithm-builder': {
+      const { steps, correctOrder } = question.config
+      if (steps.length < 6 || correctOrder.length !== 4 || duplicates(steps.map(({ id }) => id)).length) errors.push(`${prefix}: invalid algorithm-builder step set.`)
+      if (correctOrder.some((id) => !steps.some((step) => step.id === id))) errors.push(`${prefix}: builder order references an unknown step.`)
+      if (steps.some((step) => empty(step.text) || empty(step.reason) || wordCount(step.text) > 32)) errors.push(`${prefix}: builder steps need concise reviewed wording.`)
+      break
+    }
+    case 'code-construction': {
+      const config = question.config
+      if (!config.languages.length || duplicates(config.languages).length || config.steps.length < 5 || config.steps.length > 7) errors.push(`${prefix}: invalid construction language or step count.`)
+      const priorIds = new Set<string>()
+      for (const language of config.languages) {
+        if (empty(config.openingByLanguage[language] ?? '') || config.closingByLanguage[language] === undefined) errors.push(`${prefix}: missing ${language} construction boundary.`)
+        if (empty(assembleConstructionCode(config, language))) errors.push(`${prefix}: assembled ${language} code is empty.`)
+      }
+      for (const step of config.steps) {
+        if (step.prerequisites.some((id) => !priorIds.has(id))) errors.push(`${prefix}/${step.id}: prerequisite must reference an earlier step.`)
+        if (step.choices.length !== 3 || duplicates(step.choices.map(({ id }) => id)).length || !step.choices.some(({ id }) => id === step.correctChoiceId)) errors.push(`${prefix}/${step.id}: invalid construction choices.`)
+        if (step.hints.length !== 3 || duplicates(step.hints.map(({ id }) => id)).length) errors.push(`${prefix}/${step.id}: construction step needs three hints.`)
+        priorIds.add(step.id)
+      }
+      break
+    }
+    case 'iteration-visualization': {
+      const { input, expectedOutput, code, language, frames, checkpoint } = question.config
+      if ([input, expectedOutput, code, language].some(empty) || frames.length < 6) errors.push(`${prefix}: visualization needs complete I/O, code, and at least six frames.`)
+      if (checkpoint.options.length !== 4 || checkpoint.answer < 0 || checkpoint.answer >= checkpoint.options.length) errors.push(`${prefix}: invalid visualization checkpoint.`)
+      const lineCount = code.split('\n').length
+      if (frames.some((frame) => empty(frame.title) || empty(frame.action) || empty(frame.invariant) || !frame.activeCodeLines.length || frame.activeCodeLines.some((line) => line < 0 || line >= lineCount))) errors.push(`${prefix}: incomplete visualization frame.`)
+      break
+    }
+    case 'constraint-signals': {
+      const { sourceText, signals, consequences } = question.config
+      const consequenceIds = new Set(consequences.map(({ id }) => id))
+      if (empty(sourceText) || signals.length < 3 || !signals.some(({ importance }) => importance === 'decisive')) errors.push(`${prefix}: constraint fixture needs source text and decisive signals.`)
+      if (duplicates(signals.map(({ id }) => id)).length || duplicates(consequences.map(({ id }) => id)).length) errors.push(`${prefix}: signal and consequence ids must be unique.`)
+      if (signals.some(({ importance, consequenceIds: ids }) => importance === 'incidental' ? ids.length !== 0 : !ids.length || ids.some((id) => !consequenceIds.has(id)))) errors.push(`${prefix}: signal consequence mapping is invalid.`)
+      if (consequences.some(({ text, feedback }) => empty(text) || empty(feedback))) errors.push(`${prefix}: every consequence needs text and diagnostic feedback.`)
+      break
+    }
+    case 'operation-contract': {
+      const { operationOptions, structures, correctStructureIds } = question.config
+      const operationIds = new Set(operationOptions.map(({ id }) => id))
+      if (!operationOptions.some(({ required }) => required) || duplicates(operationOptions.map(({ id }) => id)).length || duplicates(structures.map(({ id }) => id)).length) errors.push(`${prefix}: operation fixture needs unique required operations and structures.`)
+      if (structures.some(({ satisfiesOperationIds }) => satisfiesOperationIds.some((id) => !operationIds.has(id)))) errors.push(`${prefix}: structure references an unknown operation.`)
+      if (!correctStructureIds.length || correctStructureIds.some((id) => !structures.some((structure) => structure.id === id))) errors.push(`${prefix}: correct structure ids are invalid.`)
+      if (operationOptions.some(({ label, feedback }) => empty(label) || empty(feedback)) || structures.some(({ label, tradeoff }) => empty(label) || empty(tradeoff))) errors.push(`${prefix}: operation choices need diagnostic wording.`)
+      break
+    }
+    case 'state-sufficiency': {
+      const { checkpoint, items, minimalRequiredSets, maxItems } = question.config
+      const itemIds = new Set(items.map(({ id }) => id))
+      const requiredIds = items.filter(({ classification }) => classification === 'required').map(({ id }) => id)
+      if (empty(checkpoint.input) || empty(checkpoint.stateDescription) || duplicates(items.map(({ id }) => id)).length || !minimalRequiredSets.length) errors.push(`${prefix}: invalid state fixture.`)
+      if (minimalRequiredSets.some((set) => !set.length || set.some((id) => !itemIds.has(id)) || requiredIds.some((id) => !set.includes(id)))) errors.push(`${prefix}: minimal state set is not sufficient.`)
+      if (maxItems !== undefined && minimalRequiredSets.some((set) => set.length > maxItems)) errors.push(`${prefix}: state budget is smaller than a minimal sufficient set.`)
+      if (items.some(({ label, feedback }) => empty(label) || empty(feedback))) errors.push(`${prefix}: state items need diagnostic wording.`)
+      break
+    }
+    case 'near-twin': {
+      const config = question.config
+      const factIds = new Set(config.facts.map(({ id }) => id))
+      if (!config.relationshipOptions.some(({ id }) => id === config.correctRelationshipId) || !config.decisiveReasonIds.length || config.decisiveReasonIds.some((id) => !factIds.has(id))) errors.push(`${prefix}: near-twin tuple is invalid.`)
+      if (!config.changedFactIds.length || config.changedFactIds.some((id) => !factIds.has(id))) errors.push(`${prefix}: near-twin changed facts are invalid.`)
+      break
+    }
+    case 'constraint-mutation': {
+      const config = question.config
+      if (!(config.mutation.addedText?.length || config.mutation.removedText?.length) || config.aspects.length < 3 || duplicates(config.aspects.map(({ id }) => id)).length) errors.push(`${prefix}: mutation needs a concrete diff and unique aspects.`)
+      if (config.aspects.some(({ label, feedback }) => empty(label) || empty(feedback))) errors.push(`${prefix}: mutation aspects need feedback.`)
+      break
+    }
+    case 'structural-analogy': {
+      const config = question.config
+      const choiceAIds = new Set(config.choicesA.map(({ id }) => id))
+      const choiceBIds = new Set(config.choicesB.map(({ id }) => id))
+      if (config.roles.length < 3 || duplicates(config.roles.map(({ id }) => id)).length) errors.push(`${prefix}: analogy needs at least three unique roles.`)
+      if (config.roles.some(({ problemAChoiceId, problemBChoiceId }) => !choiceAIds.has(problemAChoiceId) || !choiceBIds.has(problemBChoiceId))) errors.push(`${prefix}: analogy role references an unknown choice.`)
+      break
+    }
+    default: {
+      const exhaustive: never = question
+      errors.push(`Unknown question format: ${JSON.stringify(exhaustive)}`)
+    }
+  }
+  return errors
+}
 
 export const validateCoachingContent = (problems: Problem[]) => {
   const errors: string[] = []
-  // The external dataset contains 134 entries; two curated-only problems (121 and 704) bring the merged catalog to 136.
   if (problems.length !== 136) errors.push(`Expected 136 merged catalog problems; found ${problems.length}.`)
   const catalogIds = new Set(problems.map(({ id }) => id))
   const lessonSlugs = new Set(lessons.map(({ slug }) => slug))
+
   for (const pattern of Object.keys(patternProfiles)) {
     const beginner = beginnerPatternProfiles[pattern as keyof typeof beginnerPatternProfiles]
     if (!beginner) {
@@ -22,10 +138,11 @@ export const validateCoachingContent = (problems: Problem[]) => {
       continue
     }
     for (const [field, value] of Object.entries(beginner)) {
-      if (!value.trim()) errors.push(`${pattern}.${field}: beginner-facing content is empty.`)
+      if (empty(value)) errors.push(`${pattern}.${field}: beginner-facing content is empty.`)
       if (wordCount(value) > 32) errors.push(`${pattern}.${field}: beginner-facing content exceeds 32 words.`)
     }
   }
+
   for (const problem of problems) {
     const fact = problemTeachingFacts[problem.id]
     if (!fact) {
@@ -37,104 +154,35 @@ export const validateCoachingContent = (problems: Problem[]) => {
     const path = compileQuestionPath(problem, problems)
     const expected = DEEP_PROBLEM_IDS.has(problem.id) ? 12 : 9
     if (path.length !== expected) errors.push(`${problem.id}: expected ${expected} questions; found ${path.length}.`)
-    const formats = path.map((question) => question.format ?? 'multiple-choice')
-    if (formats.filter((format) => ['algorithm-builder', 'code-construction'].includes(format)).length !== 1) errors.push(`${problem.id}: expected one algorithm-building interaction.`)
+    const formats = path.map(({ format }) => format)
+    if (formats.filter((format) => format === 'algorithm-builder' || format === 'code-construction').length !== 1) errors.push(`${problem.id}: expected one algorithm-building interaction.`)
     if (formats.includes('iteration-visualization')) errors.push(`${problem.id}: iteration visualization belongs in Learn, not the graded path.`)
-    const buildIndex = formats.findIndex((format) => ['algorithm-builder', 'code-construction'].includes(format))
+    const buildIndex = formats.findIndex((format) => format === 'algorithm-builder' || format === 'code-construction')
     if (buildIndex !== formats.length - 3 || path.at(-2)?.stage !== 'time-complexity' || path.at(-1)?.stage !== 'space-complexity') errors.push(`${problem.id}: construction must be followed only by time and space complexity.`)
-    if (!hasDataStructureGateBeforeAlgorithms(path)) errors.push(`${problem.id}: data-structure identification must precede every algorithm-dependent question.`)
-    const stageIndexes = new Map(path.map(({ stage }, index) => [stage, index]))
-    path.forEach((question) => {
-      const format = question.format ?? 'multiple-choice'
-      if (!question.teachingContext?.title.trim() || !question.teachingContext.body.trim()) errors.push(`${question.id}: missing beginner teaching context.`)
-      if (!question.formalTerm?.name.trim() || !question.formalTerm.definition.trim()) errors.push(`${question.id}: missing formal-term reveal.`)
-      if (wordCount(question.prompt) > 24) errors.push(`${question.id}: prompt exceeds 24 words.`)
-      if (wordCount(question.hint) > 32) errors.push(`${question.id}: hint exceeds 32 words.`)
-      if (question.teachingContext && wordCount(question.teachingContext.body) > 32) errors.push(`${question.id}: teaching context exceeds 32 words.`)
-      if (question.formalTerm && wordCount(question.formalTerm.definition) > 24) errors.push(`${question.id}: formal definition exceeds 24 words.`)
-      if (question.hintLevels?.length !== 3 || new Set(question.hintLevels.map(({ id }) => id)).size !== 3) errors.push(`${question.id}: requires three ordered, unique hint levels.`)
-      if (question.hintLevels?.some(({ label, text }) => !label.trim() || !text.trim() || wordCount(text) > 32)) errors.push(`${question.id}: hint levels require concise labels and text.`)
-      if (question.hintLevels?.some(({ text }) => question.options.some((option) => text.trim().toLocaleLowerCase() === option.trim().toLocaleLowerCase()))) errors.push(`${question.id}: a hint directly reveals an answer option.`)
-      if (!question.prerequisites || !question.readingLevelNotes?.length) errors.push(`${question.id}: missing prerequisite or reading-level metadata.`)
-      const currentStageIndex = stageIndexes.get(question.stage)
-      if (question.prerequisites?.some((stage) => {
-        const prerequisiteIndex = stageIndexes.get(stage)
-        return prerequisiteIndex === undefined || currentStageIndex === undefined || prerequisiteIndex >= currentStageIndex
-      })) errors.push(`${question.id}: prerequisite stages must exist earlier in the active path.`)
-      const learnerCopy = [question.prompt, question.hint, question.teachingContext?.body ?? '', ...question.options].join(' ')
-      if (/proof obligation|monotonic predicate|structural induction|optimal substructure/i.test(learnerCopy)) errors.push(`${question.id}: learner-facing copy contains unexplained advanced language.`)
-      if (format === 'algorithm-builder') {
-        const builder = question.builder
-        if (!builder || builder.steps.length < 6) errors.push(`${question.id}: builder must contain at least six candidate steps.`)
-        if (!builder || builder.correctOrder.length !== 4) errors.push(`${question.id}: builder must require four ordered phases.`)
-        if (builder && new Set(builder.steps.map(({ id }) => id)).size !== builder.steps.length) errors.push(`${question.id}: builder step ids must be unique.`)
-        if (builder && builder.correctOrder.some((id) => !builder.steps.some((step) => step.id === id))) errors.push(`${question.id}: builder order references an unknown step.`)
-        if (builder?.steps.some((step) => !step.text.trim() || !step.reason.trim())) errors.push(`${question.id}: builder steps require text and reasoning.`)
-        if (builder?.steps.some((step) => wordCount(step.text) > 32)) errors.push(`${question.id}: builder step exceeds 32 words.`)
-      } else if (format === 'code-construction') {
-        const construction = question.construction
-        if (!construction) {
-          errors.push(`${question.id}: missing code-construction configuration.`)
-        } else {
-          if (!construction.languages.length || new Set(construction.languages).size !== construction.languages.length) errors.push(`${question.id}: construction languages must be nonempty and unique.`)
-          if (!construction.exampleInput.trim()) errors.push(`${question.id}: construction requires a concrete example input.`)
-          if (construction.steps.length < 5 || construction.steps.length > 7) errors.push(`${question.id}: construction must contain five to seven decisions.`)
-          if (new Set(construction.steps.map(({ id }) => id)).size !== construction.steps.length) errors.push(`${question.id}: construction step ids must be unique.`)
-          for (const language of construction.languages) {
-            if (!construction.openingByLanguage[language]?.trim()) errors.push(`${question.id}: missing ${language} opening code.`)
-            if (construction.closingByLanguage[language] === undefined) errors.push(`${question.id}: missing ${language} closing code.`)
-            if (!assembleConstructionCode(construction, language).trim()) errors.push(`${question.id}: assembled ${language} implementation is empty.`)
-          }
-          const priorIds = new Set<string>()
-          for (const step of construction.steps) {
-            if (!step.id.trim() || !step.concept.trim() || !step.stateEffect.trim() || !step.exampleState.trim() || !step.explanation.trim()) errors.push(`${question.id}/${step.id}: construction decision requires complete teaching content and example state.`)
-            if (step.prerequisites.some((id) => !priorIds.has(id))) errors.push(`${question.id}/${step.id}: construction prerequisites must reference earlier decisions.`)
-            if (step.choices.length !== 3 || new Set(step.choices.map(({ id }) => id)).size !== 3) errors.push(`${question.id}/${step.id}: construction decision requires three unique choices.`)
-            if (!step.choices.some(({ id }) => id === step.correctChoiceId)) errors.push(`${question.id}/${step.id}: correct choice is missing.`)
-            if (step.hints.length !== 3 || new Set(step.hints.map(({ id }) => id)).size !== 3) errors.push(`${question.id}/${step.id}: construction decision requires three unique hints.`)
-            for (const option of step.choices) {
-              if (!option.feedback.trim()) errors.push(`${question.id}/${step.id}/${option.id}: choice feedback is empty.`)
-              for (const language of construction.languages) if (!option.codeByLanguage[language]?.trim()) errors.push(`${question.id}/${step.id}/${option.id}: missing ${language} code.`)
-            }
-            priorIds.add(step.id)
-          }
-        }
-      } else {
-        if (question.options.length !== 4 || new Set(question.options).size !== 4) errors.push(`${question.id}: options must contain four unique values.`)
-        if (question.answer < 0 || question.answer > 3) errors.push(`${question.id}: answer is out of bounds.`)
-        if (question.optionFeedback?.length !== 4) errors.push(`${question.id}: missing option-specific feedback.`)
-        if (question.misconceptionLinks?.length !== 4) errors.push(`${question.id}: missing option-level repair metadata.`)
-        if (question.misconceptionLinks?.some((link, index) => index === question.answer ? link !== undefined : !link || !lessonSlugs.has(link.lessonSlug))) errors.push(`${question.id}: repair metadata needs one valid lesson destination for every incorrect option.`)
-        if (DEEP_PROBLEM_IDS.has(problem.id) && question.misconceptionLinks?.some((link, index) => index !== question.answer && link?.specificity !== 'reviewed-option')) errors.push(`${question.id}: deep coaching paths require reviewed option-level repair metadata.`)
-        if (!['contract', 'time-complexity', 'space-complexity'].includes(question.stage ?? '') && question.options.some((option) => wordCount(option) > 32)) errors.push(`${question.id}: answer option exceeds 32 words.`)
-      }
-      if (format === 'iteration-visualization') {
-        const visualization = question.visualization
-        const frames = visualization?.frames
-        if (!visualization?.input.trim() || !visualization.expectedOutput.trim() || !visualization.code.trim() || !visualization.language.trim()) errors.push(`${question.id}: visualization requires input, output, code, and language.`)
-        if (!frames || frames.length < 6) errors.push(`${question.id}: visualization must contain at least six execution frames.`)
-        if (frames?.some((frame) =>
-          !frame.title.trim()
-          || !frame.action.trim()
-          || !frame.invariant.trim()
-          || !frame.input.trim()
-          || !frame.expectedOutput.trim()
-          || !frame.currentOutput.trim()
-          || !frame.processed.trim()
-          || !frame.remaining.trim()
-          || frame.variables.length + (frame.structures?.length ?? 0) < 2
-        )) errors.push(`${question.id}: every visualization frame needs complete input, output, progress, variable, action, and invariant state.`)
-        if (frames?.some((frame) => new Set(frame.variables.map(({ name }) => name)).size !== frame.variables.length)) errors.push(`${question.id}: visualization variable names must be unique within a frame.`)
-        if (frames?.some((frame) => frame.variables.some(({ name, value, role }) => !name.trim() || !value.trim() || !['input', 'control', 'state', 'output'].includes(role)))) errors.push(`${question.id}: visualization variables require names, values, and valid roles.`)
-        const codeLineCount = visualization?.code.split('\n').length ?? 0
-        if (frames?.some((frame) => !frame.activeCodeLines.length || frame.activeCodeLines.some((line) => line < 0 || line >= codeLineCount))) errors.push(`${question.id}: every visualization frame must reference valid active code lines.`)
-        if (frames?.some((frame) => frame.input !== visualization?.input || frame.expectedOutput !== visualization?.expectedOutput)) errors.push(`${question.id}: every frame must retain the concrete example input and expected output.`)
-      }
-      if ([question.prompt, question.explanation, question.hint, ...question.options].some((value) => !value.trim() || /TODO|placeholder/i.test(value))) errors.push(`${question.id}: empty or placeholder content.`)
-    })
+    if (!hasDataStructureGateBeforeAlgorithms(path)) errors.push(`${problem.id}: data-structure reasoning must precede algorithm-dependent questions.`)
+    for (const question of path) errors.push(...validateQuestion(question, problem, lessonSlugs))
     if (JSON.stringify(path) !== JSON.stringify(compileQuestionPath(problem, problems))) errors.push(`${problem.id}: compilation is not deterministic.`)
   }
+
   for (const id of Object.keys(problemTeachingFacts).map(Number)) if (!catalogIds.has(id)) errors.push(`${id}: teaching fact has no catalog problem.`)
+  if (INTUITION_PILOT_IDS.size !== 5) errors.push(`Expected five intuition pilots; found ${INTUITION_PILOT_IDS.size}.`)
+  const pilotFormats = new Set<string>()
+  for (const id of INTUITION_PILOT_IDS) {
+    const problem = problems.find((candidate) => candidate.id === id)
+    const model = PILOT_REASONING_MODELS[id]
+    if (!problem || !model?.reviewed) {
+      errors.push(`${id}: missing reviewed pilot reasoning model.`)
+      continue
+    }
+    const core = Object.values(compilePilotCoreQuestions(problem)) as QuizQuestion[]
+    const transfer = compilePilotTransferQuestions(problem)
+    if (core.length < 3) errors.push(`${id}: pilot metadata must support at least three Wave 1 formats.`)
+    for (const question of [...core, ...transfer]) {
+      pilotFormats.add(question.format)
+      errors.push(...validateQuestion(question, problem, lessonSlugs))
+    }
+  }
+  for (const format of ['constraint-signals', 'operation-contract', 'state-sufficiency', 'near-twin', 'constraint-mutation', 'structural-analogy']) if (!pilotFormats.has(format)) errors.push(`Wave 1 format ${format} has no reviewed pilot fixture.`)
   return errors
 }
 

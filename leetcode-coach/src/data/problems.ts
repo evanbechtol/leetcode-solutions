@@ -4,7 +4,9 @@ import { curatedCodeSamples } from './solutions'
 import { compileQuestionPath } from './coaching/compiler'
 import { assertValidCoachingContent } from './coaching/validation'
 
-export const curatedProblems: Problem[] = [
+type SourceProblem = Omit<Problem, 'questions'> & { questions: Array<Record<string, unknown>> }
+
+export const curatedProblems: SourceProblem[] = [
   {
     id: 1,
     title: 'Two Sum',
@@ -113,7 +115,7 @@ for (const problem of curatedProblems) {
 
 const byId = new Map<number, Problem>()
 for (const problem of importedProblems as Problem[]) byId.set(problem.id, problem)
-for (const problem of curatedProblems) byId.set(problem.id, problem)
+for (const problem of curatedProblems) byId.set(problem.id, problem as unknown as Problem)
 const mergedProblems: Problem[] = [...byId.values()]
 export const problems: Problem[] = mergedProblems.map((problem) => ({
   ...problem,

@@ -5,7 +5,7 @@ import python from 'highlight.js/lib/languages/python'
 import java from 'highlight.js/lib/languages/java'
 import cpp from 'highlight.js/lib/languages/cpp'
 import rust from 'highlight.js/lib/languages/rust'
-import type { CodeConstructionChoice, QuestionInteractionState, QuizQuestion } from '../../types'
+import type { CodeConstructionChoice, QuestionInteractionResult, QuestionInteractionState, QuizQuestion } from '../../types'
 import { useCodeLanguagePreference } from '../../composables/useCodeLanguagePreference'
 import { evaluateCodeConstructionChoice } from '../../utils/questionEvaluation'
 import { assembleConstructionCode } from '../../data/coaching/codeConstruction'
@@ -17,10 +17,11 @@ hljs.registerLanguage('rust', rust)
 
 const props = defineProps<{ question: QuizQuestion; submitted: boolean; initialState?: QuestionInteractionState | null }>()
 const emit = defineEmits<{
-  (event: 'response-change', response: { ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState }): void
+  (event: 'response-change', response: QuestionInteractionResult): void
 }>()
 
-const config = computed(() => props.question.construction!)
+const config = computed(() => props.question.format === 'code-construction' ? props.question.config : neverConfig())
+const neverConfig = (): never => { throw new Error('Invalid code-construction question.') }
 const validStepIds = new Set(config.value.steps.map(({ id }) => id))
 const restored = props.initialState?.format === 'code-construction' ? props.initialState : null
 const restoredPrefix: string[] = []
@@ -34,6 +35,7 @@ const selectedChoiceId = ref<string | null>(restored?.selectedChoiceId ?? null)
 const lastCheckedChoiceId = ref<string | null>(restored?.lastCheckedChoiceId ?? null)
 const lastCompletedStepId = ref<string | null>(restoredPrefix.at(-1) ?? null)
 const revealedStepHints = ref(0)
+const hadIncorrectChoice = ref(false)
 const { preferredLanguage, setPreferredLanguage } = useCodeLanguagePreference()
 
 const activeLanguage = computed(() => config.value.languages.includes(preferredLanguage.value)
@@ -70,7 +72,10 @@ function checkLine() {
   if (!currentStep.value || !selectedChoiceId.value || props.submitted) return
   const evaluation = evaluateCodeConstructionChoice(currentStep.value, selectedChoiceId.value)
   lastCheckedChoiceId.value = selectedChoiceId.value
-  if (!evaluation.correct) return
+  if (!evaluation.correct) {
+    hadIncorrectChoice.value = true
+    return
+  }
   lastCompletedStepId.value = currentStep.value.id
   completedStepIds.value.push(currentStep.value.id)
   selectedChoiceId.value = null
@@ -84,8 +89,12 @@ function revealHint() {
 }
 
 watch([completedStepIds, selectedChoiceId, lastCheckedChoiceId], () => emit('response-change', {
-  ready: complete.value,
+  complete: complete.value,
   correct: complete.value,
+  firstAttempt: !hadIncorrectChoice.value,
+  hintLevelReached: Math.min(revealedStepHints.value, 3) as 0 | 1 | 2 | 3,
+  diagnosticKeys: checkedChoice.value ? [`code-construction:${currentStep.value?.id ?? 'complete'}:${checkedChoice.value.id}`] : [],
+  evidence: { completedStepIds: [...completedStepIds.value], lastCheckedChoiceId: lastCheckedChoiceId.value },
   feedback: complete.value ? props.question.explanation : (checkedChoice.value?.feedback ?? props.question.hint),
   state: {
     format: 'code-construction',

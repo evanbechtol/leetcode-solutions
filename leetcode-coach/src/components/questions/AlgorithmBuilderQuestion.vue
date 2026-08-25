@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { QuestionInteractionState, QuizQuestion } from '../../types'
+import type { QuestionInteractionResult, QuestionInteractionState, QuizQuestion } from '../../types'
 import { evaluateAlgorithmOrder } from '../../utils/questionEvaluation'
 
 const props = defineProps<{ question: QuizQuestion; submitted: boolean; initialState?: QuestionInteractionState | null }>()
 const emit = defineEmits<{
-  (event: 'response-change', response: { ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState }): void
+  (event: 'response-change', response: QuestionInteractionResult): void
 }>()
 
-const validStepIds = new Set(props.question.builder?.steps.map(({ id }) => id) ?? [])
+if (props.question.format !== 'algorithm-builder') throw new Error('AlgorithmBuilderQuestion requires algorithm-builder format.')
+const validStepIds = new Set(props.question.config.steps.map(({ id }) => id))
 const restoredIds = props.initialState?.format === 'algorithm-builder'
   ? props.initialState.chosenIds.filter((id) => validStepIds.has(id))
   : []
 const chosenIds = ref<string[]>(restoredIds)
-const config = computed(() => props.question.builder!)
+const config = computed(() => props.question.format === 'algorithm-builder' ? props.question.config : neverConfig())
+const neverConfig = (): never => { throw new Error('Invalid algorithm-builder question.') }
 const requiredCount = computed(() => config.value.correctOrder.length)
 const chosenSteps = computed(() => chosenIds.value.map((id) => config.value.steps.find((step) => step.id === id)!))
 const availableSteps = computed(() => config.value.steps.filter((step) => !chosenIds.value.includes(step.id)))
@@ -46,8 +48,12 @@ function reset() {
 }
 
 watch(chosenIds, () => emit('response-change', {
-  ready: evaluation.value.ready,
+  complete: evaluation.value.ready,
   correct: isCorrect.value,
+  firstAttempt: true,
+  hintLevelReached: 0,
+  diagnosticKeys: firstMismatch.value >= 0 ? [`algorithm-order:${firstMismatch.value}`] : [],
+  evidence: { chosenIds: [...chosenIds.value], firstMismatch: firstMismatch.value },
   feedback: feedback(),
   state: { format: 'algorithm-builder', chosenIds: [...chosenIds.value] },
 }), { deep: true, immediate: true })

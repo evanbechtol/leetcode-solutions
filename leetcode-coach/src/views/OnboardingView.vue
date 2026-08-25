@@ -6,6 +6,8 @@ import { onboardingDecisions, recommendationFor } from '../data/onboarding'
 import { learningTracks } from '../data/tracks'
 import type { LearnerExperience } from '../stores/progress'
 import { useTrainerStore } from '../stores/trainer'
+import { questionComponentFor } from '../components/questions/registry'
+import type { QuestionInteractionResult } from '../types'
 
 const store = useTrainerStore()
 const router = useRouter()
@@ -15,9 +17,10 @@ const experience = ref(store.progressState.learner.experience)
 const dailyMinutes = ref(store.progressState.learner.dailyMinutes)
 const language = ref(store.progressState.learner.preferredLanguage ?? preferredLanguage.value)
 const selectedTrackId = ref(store.progressState.learner.selectedTrackIds[0] ?? 'arrays')
-const selectedAnswer = ref<number | null>(null)
 const submitted = ref(false)
 const wasCorrect = ref<boolean | null>(null)
+const interactionResponse = ref<QuestionInteractionResult | null>(null)
+const interactionKey = ref(0)
 const experienceOptions: Array<{ value: LearnerExperience; title: string; text: string }> = [
   { value: 'new-to-dsa', title: 'New to DSA', text: 'I am learning the foundations for the first time.' },
   { value: 'some-foundations', title: 'Some foundations', text: 'I know a few ideas and want a steadier system.' },
@@ -31,6 +34,7 @@ const minuteOptions: Array<{ value: 5 | 10 | 15; text: string }> = [
 
 const diagnosticIndex = computed(() => Math.min(store.progressState.learner.onboardingDecisionIds.length, onboardingDecisions.length))
 const currentDecision = computed(() => onboardingDecisions[diagnosticIndex.value] ?? null)
+const currentQuestionComponent = computed(() => currentDecision.value ? questionComponentFor(currentDecision.value.question.format) : null)
 const isSetup = computed(() => store.progressState.learner.onboardingStatus === 'not-started')
 const isRecommendation = computed(() => !isSetup.value && diagnosticIndex.value >= onboardingDecisions.length)
 const diagnosticCorrect = computed(() => {
@@ -40,7 +44,8 @@ const diagnosticCorrect = computed(() => {
 const recommendation = computed(() => recommendationFor(selectedTrackId.value, diagnosticCorrect.value))
 
 watch(diagnosticIndex, () => {
-  selectedAnswer.value = null
+  interactionResponse.value = null
+  interactionKey.value++
   submitted.value = false
   wasCorrect.value = null
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
@@ -57,11 +62,11 @@ function beginDiagnostic() {
 }
 
 function checkDecision() {
-  if (selectedAnswer.value === null || !currentDecision.value || submitted.value) return
-  wasCorrect.value = store.recordOnboardingAnswer(
+  if (!interactionResponse.value?.complete || !currentDecision.value || submitted.value) return
+  wasCorrect.value = store.recordOnboardingInteraction(
     currentDecision.value.problem.id,
     currentDecision.value.question,
-    selectedAnswer.value,
+    interactionResponse.value,
   )
   submitted.value = true
 }
@@ -71,9 +76,13 @@ function nextDecision() {
   const wasLastDecision = diagnosticIndex.value === onboardingDecisions.length - 1
   store.advanceOnboardingDecision(currentDecision.value.question.id)
   if (wasLastDecision) store.completeOnboarding()
-  selectedAnswer.value = null
+  interactionResponse.value = null
   submitted.value = false
   wasCorrect.value = null
+}
+
+function updateInteraction(response: QuestionInteractionResult) {
+  interactionResponse.value = response
 }
 
 function skip() {
@@ -166,17 +175,13 @@ function restart() {
           <div class="question-type"><v-icon icon="mdi-lightbulb-on-outline" size="18" /> {{ currentDecision.question.type }}</div>
           <div v-if="currentDecision.question.teachingContext" class="teaching-context mt-5"><span>Before you answer</span><strong>{{ currentDecision.question.teachingContext.title }}</strong><p>{{ currentDecision.question.teachingContext.body }}</p></div>
           <h2>{{ currentDecision.question.prompt }}</h2>
-          <div class="answer-list mt-7" role="radiogroup" :aria-label="currentDecision.question.prompt">
-            <button v-for="(option, index) in currentDecision.question.options" :key="option" class="answer-option" :class="{ selected: selectedAnswer === index, correct: submitted && index === currentDecision.question.answer, wrong: submitted && selectedAnswer === index && index !== currentDecision.question.answer }" :disabled="submitted" role="radio" :aria-checked="selectedAnswer === index" @click="selectedAnswer = index">
-              <span class="option-key">{{ String.fromCharCode(65 + index) }}</span><span>{{ option }}</span>
-            </button>
-          </div>
+          <component :is="currentQuestionComponent" :key="interactionKey" :question="currentDecision.question" :submitted="submitted" :initial-state="null" @response-change="updateInteraction" />
           <div v-if="submitted" class="feedback mt-6" :class="wasCorrect ? 'feedback-correct' : 'feedback-wrong'">
             <div class="feedback-heading"><v-icon :icon="wasCorrect ? 'mdi-check-decagram' : 'mdi-compass-outline'" /> {{ wasCorrect ? 'That fits.' : 'A useful signal.' }}</div>
-            <p>{{ wasCorrect ? currentDecision.question.explanation : (currentDecision.question.optionFeedback?.[selectedAnswer ?? -1] || currentDecision.question.hint) }}</p>
+            <p>{{ wasCorrect ? currentDecision.question.explanation : (interactionResponse?.feedback || currentDecision.question.hint) }}</p>
             <p v-if="!wasCorrect" class="why-note">This is evidence for a recommendation, not a mark against you. The next activity will help you build the idea.</p>
           </div>
-          <div class="onboarding-actions mt-7"><v-spacer /><v-btn v-if="!submitted" color="primary" size="large" :disabled="selectedAnswer === null" @click="checkDecision">Check decision</v-btn><v-btn v-else color="primary" size="large" append-icon="mdi-arrow-right" @click="nextDecision">{{ diagnosticIndex === onboardingDecisions.length - 1 ? 'See my starting path' : 'Next decision' }}</v-btn></div>
+          <div class="onboarding-actions mt-7"><v-spacer /><v-btn v-if="!submitted" color="primary" size="large" :disabled="!interactionResponse?.complete" @click="checkDecision">Check decision</v-btn><v-btn v-else color="primary" size="large" append-icon="mdi-arrow-right" @click="nextDecision">{{ diagnosticIndex === onboardingDecisions.length - 1 ? 'See my starting path' : 'Next decision' }}</v-btn></div>
         </v-card>
         <div class="onboarding-skip-row"><v-btn variant="text" size="small" @click="skip">Skip setup and browse the catalog</v-btn></div>
       </template>
