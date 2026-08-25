@@ -359,7 +359,7 @@ Create an optional local image card for milestones such as a stable concept, com
 
 ## Milestone 6 — Public polish, trust, and feedback loop
 
-**Status:** Planned.
+**Status:** Complete (verified August 25, 2026). Lessons, guided problems, and traces now expose reviewed trust metadata and explicit trace quality; the app includes local-first feedback with opt-in redacted diagnostics, build-time beta controls, five public policy/help routes, typed local feedback/error events, and verified static GitHub Pages-compatible output.
 
 **Priority:** P1. **Depends on:** Milestones 0–5. **Strategy tested:** Public users will trust and recommend Pathfinder when its instructional quality, privacy posture, and beta feedback path are explicit.
 
