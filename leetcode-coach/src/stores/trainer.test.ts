@@ -8,6 +8,16 @@ import { categoryRepairLink } from '../data/repairMetadata'
 import { problems } from '../data/problems'
 import { PROGRESS_V1_STORAGE_KEY, PROGRESS_V2_STORAGE_KEY } from './progress'
 import { normalizeAnswerRecord, QUESTION_FORMATS, QUESTION_TYPES, useTrainerStore } from './trainer'
+import { questionAnswer } from '../utils/questionConfig'
+import { evaluateConstraintSignals } from '../utils/questionEvaluation'
+
+const moveToMultipleChoice = (store: ReturnType<typeof useTrainerStore>, stage?: string) => {
+  const index = store.activeQuestions.findIndex((question) => question.format === 'multiple-choice' && (!stage || question.stage === stage))
+  store.currentQuestionIndex = index
+  const question = store.currentQuestion
+  if (!question || question.format !== 'multiple-choice') throw new Error('Expected multiple-choice question')
+  return question
+}
 
 const legacy = (questionType: AnswerRecord['questionType']): AnswerRecord => ({
   problemId: 1, questionId: 'legacy', questionType, correct: true, answeredAt: '2026-01-01T00:00:00.000Z',
@@ -19,7 +29,10 @@ describe('progress compatibility', () => {
   })
 
   it('tracks recognition, construction, and visualization separately', () => {
-    expect(QUESTION_FORMATS.map(({ format }) => format)).toEqual(['multiple-choice', 'algorithm-builder', 'code-construction'])
+    expect(QUESTION_FORMATS.map(({ format }) => format)).toEqual([
+      'multiple-choice', 'algorithm-builder', 'code-construction', 'constraint-signals', 'operation-contract',
+      'state-sufficiency', 'near-twin', 'constraint-mutation', 'structural-analogy',
+    ])
   })
 
   it('migrates both legacy complexity categories without losing the record', () => {
@@ -50,7 +63,7 @@ describe('active problem persistence', () => {
     const firstStore = useTrainerStore()
     expect(firstStore.startProblem(1)).toBe(true)
     firstStore.currentQuestionIndex = 2
-    firstStore.selectedAnswer = firstStore.currentQuestion!.answer
+    firstStore.selectedAnswer = questionAnswer(firstStore.currentQuestion)
     expect(firstStore.submitAnswer()).toBe(true)
     await nextTick()
 
@@ -58,7 +71,7 @@ describe('active problem persistence', () => {
     const reloadedStore = useTrainerStore()
     expect(reloadedStore.startProblem(1)).toBe(true)
     expect(reloadedStore.currentQuestionIndex).toBe(2)
-    expect(reloadedStore.selectedAnswer).toBe(reloadedStore.currentQuestion!.answer)
+    expect(reloadedStore.selectedAnswer).toBe(questionAnswer(reloadedStore.currentQuestion))
     expect(reloadedStore.submitted).toBe(true)
     expect(reloadedStore.answerCorrect).toBe(true)
     expect(reloadedStore.firstTryCorrect).toBe(1)
@@ -69,7 +82,9 @@ describe('active problem persistence', () => {
     firstStore.startProblem(121)
     const builderIndex = firstStore.activeQuestions.findIndex(({ format }) => format === 'algorithm-builder')
     firstStore.currentQuestionIndex = builderIndex
-    const chosenIds = firstStore.currentQuestion!.builder!.correctOrder.slice(0, 2)
+    const builderQuestion = firstStore.currentQuestion
+    if (!builderQuestion || builderQuestion.format !== 'algorithm-builder') throw new Error('Expected builder')
+    const chosenIds = builderQuestion.config.correctOrder.slice(0, 2)
     firstStore.setInteractionState({ format: 'algorithm-builder', chosenIds })
     await nextTick()
 
@@ -85,7 +100,9 @@ describe('active problem persistence', () => {
     firstStore.startProblem(1)
     const constructionIndex = firstStore.activeQuestions.findIndex(({ format }) => format === 'code-construction')
     firstStore.currentQuestionIndex = constructionIndex
-    const construction = firstStore.currentQuestion!.construction!
+    const constructionQuestion = firstStore.currentQuestion
+    if (!constructionQuestion || constructionQuestion.format !== 'code-construction') throw new Error('Expected construction')
+    const construction = constructionQuestion.config
     const completedStepIds = construction.steps.slice(0, 2).map(({ id }) => id)
     const selectedChoiceId = construction.steps[2].choices[1].id
     firstStore.setInteractionState({ format: 'code-construction', completedStepIds, selectedChoiceId, lastCheckedChoiceId: selectedChoiceId })
@@ -101,7 +118,9 @@ describe('active problem persistence', () => {
   it('clears only the current construction choice on retry', () => {
     const store = useTrainerStore()
     store.startProblem(1)
-    const construction = store.activeQuestions.find(({ format }) => format === 'code-construction')!.construction!
+    const constructionQuestion = store.activeQuestions.find(({ format }) => format === 'code-construction')
+    if (!constructionQuestion || constructionQuestion.format !== 'code-construction') throw new Error('Expected construction')
+    const construction = constructionQuestion.config
     const completedStepIds = construction.steps.slice(0, 2).map(({ id }) => id)
     store.setInteractionState({ format: 'code-construction', completedStepIds, selectedChoiceId: 'wrong-line', lastCheckedChoiceId: 'wrong-line' })
 
@@ -144,26 +163,53 @@ describe('active problem persistence', () => {
     const store = useTrainerStore()
     store.startProblem(1)
     store.revealNextHint()
-    store.selectedAnswer = store.currentQuestion!.answer
+    const question = moveToMultipleChoice(store)
+    store.selectedAnswer = question.config.answer
 
     expect(store.submitAnswer()).toBe(true)
 
     expect(store.progressState.attempts).toHaveLength(1)
     expect(store.progressState.attempts[0]).toMatchObject({
       problemId: 1,
-      selectedOptionIndex: store.currentQuestion!.answer,
+      selectedOptionIndex: question.config.answer,
       hintLevelReached: 1,
       firstAttempt: true,
       source: 'practice',
       topicKeys: ['Array', 'Hash Table'],
-      contentVersion: '2026-08-24',
+      contentVersion: '2026-08-25-intuition-v1',
+    })
+  })
+
+  it('records structured reasoning evidence and confidence for a Wave 1 interaction', () => {
+    const store = useTrainerStore()
+    store.startProblem(1)
+    const question = store.currentQuestion
+    if (!question || question.format !== 'constraint-signals') throw new Error('Expected constraint signals')
+    const mappings = Object.fromEntries(question.config.signals.map((signal) => [signal.id, signal.consequenceIds[0] ?? null]))
+    const evaluation = evaluateConstraintSignals(question.config, mappings)
+    store.confidence = 'high'
+
+    expect(store.submitInteraction({
+      ...evaluation,
+      firstAttempt: true,
+      hintLevelReached: 0,
+      feedback: question.explanation,
+      state: { format: 'constraint-signals', mappings },
+    })).toBe(true)
+    expect(store.progressState.attempts.at(-1)).toMatchObject({
+      questionFormat: 'constraint-signals',
+      reasoningSkillKeys: ['constraint-signal'],
+      confidence: 'high',
+      diagnosticKeys: [],
+      evidence: { decisiveSignalsFound: expect.arrayContaining(['return-indices', 'different-elements']) },
     })
   })
 
   it('exports and imports V2 progress without duplicating stable attempt IDs', () => {
     const store = useTrainerStore()
     store.startProblem(1)
-    store.selectedAnswer = store.currentQuestion!.answer
+    const question = moveToMultipleChoice(store)
+    store.selectedAnswer = question.config.answer
     store.submitAnswer()
     const exported = store.exportProgressData()
 
@@ -175,7 +221,7 @@ describe('active problem persistence', () => {
     const store = useTrainerStore()
     store.beginOnboarding({ experience: 'new-to-dsa', dailyMinutes: 5, preferredLanguage: 'Python', selectedTrackIds: ['arrays'] })
     const firstDecision = onboardingDecisions[0]
-    store.recordOnboardingAnswer(firstDecision.problem.id, firstDecision.question, firstDecision.question.answer)
+    store.recordOnboardingAnswer(firstDecision.problem.id, firstDecision.question, questionAnswer(firstDecision.question))
     store.advanceOnboardingDecision(firstDecision.question.id)
 
     expect(store.progressState.learner).toMatchObject({
@@ -211,7 +257,8 @@ describe('active problem persistence', () => {
   it('opens a safe repair after an incorrect reviewed decision and moves it through the daily review lifecycle', () => {
     const store = useTrainerStore()
     store.startProblem(1)
-    const wrongOption = (store.currentQuestion!.answer + 1) % store.currentQuestion!.options.length
+    const sourceQuestion = moveToMultipleChoice(store)
+    const wrongOption = (sourceQuestion.config.answer + 1) % sourceQuestion.config.options.length
     store.selectedAnswer = wrongOption
 
     expect(store.submitAnswer()).toBe(false)
@@ -237,7 +284,8 @@ describe('active problem persistence', () => {
   it('validates a revisited repair only after a first-try, different-day transfer decision', () => {
     const store = useTrainerStore()
     store.startProblem(1)
-    store.selectedAnswer = (store.currentQuestion!.answer + 1) % store.currentQuestion!.options.length
+    const sourceQuestion = moveToMultipleChoice(store)
+    store.selectedAnswer = (sourceQuestion.config.answer + 1) % sourceQuestion.config.options.length
     store.submitAnswer()
     const repair = store.progressState.repairs[0]
     const source = store.progressState.attempts.find(({ id }) => id === repair.sourceAttemptId)!
@@ -251,10 +299,11 @@ describe('active problem persistence', () => {
     session.status = 'planned'
     store.startProblem(121)
     expect(store.todayTasks[0]).toMatchObject({ id: `repair-retrieval:${repair.id}:121`, problemId: 121 })
-    expect(store.currentQuestion?.stage).toBe('contract')
-    expect(repair.misconceptionKey).toBe(categoryRepairLink(problems.find(({ id }) => id === 1)!, 'contract').key)
-    expect(categoryRepairLink(problems.find(({ id }) => id === 121)!, 'contract').key).toBe(repair.misconceptionKey)
-    store.selectedAnswer = store.currentQuestion!.answer
+    const transferQuestion = moveToMultipleChoice(store, sourceQuestion.stage)
+    expect(transferQuestion.stage).toBe(sourceQuestion.stage)
+    expect(repair.misconceptionKey).toBe(categoryRepairLink(problems.find(({ id }) => id === 1)!, sourceQuestion.stage).key)
+    expect(categoryRepairLink(problems.find(({ id }) => id === 121)!, transferQuestion.stage).key).toBe(repair.misconceptionKey)
+    store.selectedAnswer = transferQuestion.config.answer
 
     expect(store.submitAnswer()).toBe(true)
     expect(store.progressState.attempts.at(-1)?.source).toBe('daily-session')

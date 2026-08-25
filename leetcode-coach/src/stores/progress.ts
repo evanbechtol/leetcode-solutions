@@ -1,4 +1,5 @@
-import type { AnswerRecord, ProblemResult, QuestionFormat, QuestionStage, QuestionType } from '../types'
+import { QUESTION_FORMATS } from '../types'
+import type { AnswerRecord, ConfidenceLevel, InstructionalLevel, ProblemResult, QuestionFormat, QuestionStage, QuestionType, ReasoningSkillKey } from '../types'
 
 export const PROGRESS_V1_STORAGE_KEY = 'pathfinder-progress-v1'
 export const PROGRESS_V2_STORAGE_KEY = 'pathfinder-progress-v2'
@@ -9,7 +10,7 @@ export const DETAILED_ATTEMPT_RETENTION_DAYS = 365
 export type LearnerExperience = 'new-to-dsa' | 'some-foundations' | 'interview-review'
 export type DailyMinutes = 5 | 10 | 15
 export type ProgressSource = 'practice' | 'daily-session' | 'repair' | 'onboarding'
-export type ConfidenceLevel = 'low' | 'medium' | 'high'
+export type { ConfidenceLevel } from '../types'
 
 export interface LearnerProfile {
   onboardingStatus: 'not-started' | 'in-progress' | 'complete'
@@ -37,6 +38,10 @@ export interface AttemptRecord {
   firstAttempt: boolean
   hintLevelReached: 0 | 1 | 2 | 3
   confidence?: ConfidenceLevel
+  reasoningSkillKeys: ReasoningSkillKey[]
+  instructionalLevel: InstructionalLevel
+  diagnosticKeys: string[]
+  evidence: Record<string, unknown>
   contentVersion: string
   source: ProgressSource
   topicKeys: string[]
@@ -151,9 +156,9 @@ interface PersistedProgressV1 {
 }
 
 const QUESTION_TYPES: QuestionType[] = ['Comprehension', 'Pattern', 'Data Structure', 'Invariant', 'Algorithm', 'Correctness', 'Complexity']
-const QUESTION_FORMATS: QuestionFormat[] = ['multiple-choice', 'algorithm-builder', 'code-construction', 'iteration-visualization']
 const QUESTION_STAGES: QuestionStage[] = ['contract', 'bottleneck', 'pattern', 'data-structure', 'invariant', 'visualization', 'build-algorithm', 'transition', 'trace', 'correctness', 'edge-case', 'time-complexity', 'space-complexity', 'tradeoff']
 const CONFIDENCE_LEVELS: ConfidenceLevel[] = ['low', 'medium', 'high']
+const INSTRUCTIONAL_LEVELS: InstructionalLevel[] = ['observe', 'complete', 'construct', 'retrieve', 'transfer']
 const PROGRESS_SOURCES: ProgressSource[] = ['practice', 'daily-session', 'repair', 'onboarding']
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -249,6 +254,10 @@ const validAttempt = (value: unknown): value is AttemptRecord => {
     && typeof value.firstAttempt === 'boolean'
     && [0, 1, 2, 3].includes(value.hintLevelReached as number)
     && (value.confidence === undefined || isConfidenceLevel(value.confidence))
+    && (value.reasoningSkillKeys === undefined || asStringArray(value.reasoningSkillKeys) !== null)
+    && (value.instructionalLevel === undefined || INSTRUCTIONAL_LEVELS.includes(value.instructionalLevel as InstructionalLevel))
+    && (value.diagnosticKeys === undefined || asStringArray(value.diagnosticKeys) !== null)
+    && (value.evidence === undefined || isRecord(value.evidence))
     && isString(value.contentVersion)
     && isProgressSource(value.source)
     && asStringArray(value.topicKeys) !== null
@@ -317,6 +326,13 @@ export const isProgressStateV2 = (value: unknown): value is ProgressStateV2 => {
 // views consume them so a minor local release never turns into data recovery.
 const normalizeProgressV2 = (state: ProgressStateV2): ProgressStateV2 => ({
   ...state,
+  attempts: state.attempts.map((attempt) => ({
+    ...attempt,
+    reasoningSkillKeys: attempt.reasoningSkillKeys ?? [],
+    instructionalLevel: attempt.instructionalLevel ?? 'complete',
+    diagnosticKeys: attempt.diagnosticKeys ?? [],
+    evidence: attempt.evidence ?? {},
+  })),
   learner: {
     ...state.learner,
     onboardingDecisionIds: state.learner.onboardingDecisionIds ?? [],
@@ -357,11 +373,15 @@ export const migrateV1Progress = (
     localDay: localDayFor(new Date(answer.answeredAt)),
     problemId: answer.problemId,
     questionId: answer.questionId,
-    questionType: answer.questionType,
+    questionType: answer.questionType === 'Time Complexity' || answer.questionType === 'Space Complexity' ? 'Complexity' : answer.questionType,
     questionFormat: answer.questionFormat ?? 'multiple-choice',
     correct: answer.correct,
     firstAttempt: false,
     hintLevelReached: 0,
+    reasoningSkillKeys: [],
+    instructionalLevel: 'complete',
+    diagnosticKeys: [],
+    evidence: {},
     contentVersion: 'legacy-v1',
     source: 'practice',
     topicKeys: content.problemTopics[answer.problemId] ?? [],
@@ -509,10 +529,15 @@ export const importProgress = (
 export const serializeProgress = (state: ProgressStateV2) => JSON.stringify(state, null, 2)
 
 export const createAttempt = (
-  input: Omit<AttemptRecord, 'id' | 'occurredAt' | 'localDay'>,
+  input: Omit<AttemptRecord, 'id' | 'occurredAt' | 'localDay' | 'reasoningSkillKeys' | 'instructionalLevel' | 'diagnosticKeys' | 'evidence'>
+    & Partial<Pick<AttemptRecord, 'reasoningSkillKeys' | 'instructionalLevel' | 'diagnosticKeys' | 'evidence'>>,
   now = new Date(),
 ): AttemptRecord => ({
   ...input,
+  reasoningSkillKeys: input.reasoningSkillKeys ?? [],
+  instructionalLevel: input.instructionalLevel ?? 'complete',
+  diagnosticKeys: input.diagnosticKeys ?? [],
+  evidence: input.evidence ?? {},
   id: idFor('attempt'),
   occurredAt: now.toISOString(),
   localDay: localDayFor(now),

@@ -29,7 +29,10 @@ describe('deterministic coaching catalog', () => {
       const constructionIndex = problem.questions.findIndex(({ format }) => ['algorithm-builder', 'code-construction'].includes(format ?? 'multiple-choice'))
       expect(constructionIndex).toBe(problem.questions.length - 3)
       expect(problem.questions.slice(constructionIndex + 1).map(({ stage }) => stage)).toEqual(['time-complexity', 'space-complexity'])
-      const visualization = compileLessonVisualization(problem).visualization!
+      const visualizationQuestion = compileLessonVisualization(problem)
+      expect(visualizationQuestion.format).toBe('iteration-visualization')
+      if (visualizationQuestion.format !== 'iteration-visualization') throw new Error('Expected visualization question')
+      const visualization = visualizationQuestion.config
       expect(visualization.frames.length).toBeGreaterThanOrEqual(6)
       expect(visualization.code.trim()).not.toBe('')
       for (const frame of visualization.frames) {
@@ -49,18 +52,20 @@ describe('deterministic coaching catalog', () => {
       expect(first).toEqual(second)
       for (const question of first) {
         if (question.format === 'algorithm-builder') {
-          expect(new Set(question.builder?.steps.map(({ id }) => id))).toHaveLength(6)
-          expect(question.builder?.correctOrder).toHaveLength(4)
+          expect(new Set(question.config.steps.map(({ id }) => id))).toHaveLength(6)
+          expect(question.config.correctOrder).toHaveLength(4)
         } else if (question.format === 'code-construction') {
-          expect(question.construction?.steps.length).toBeGreaterThanOrEqual(5)
-          for (const language of question.construction?.languages ?? []) {
-            expect(assembleConstructionCode(question.construction!, language)).not.toContain('Choose next')
-            expect(assembleConstructionCode(question.construction!, language).trim()).not.toBe('')
+          expect(question.config.steps.length).toBeGreaterThanOrEqual(5)
+          for (const language of question.config.languages) {
+            expect(assembleConstructionCode(question.config, language)).not.toContain('Choose next')
+            expect(assembleConstructionCode(question.config, language).trim()).not.toBe('')
           }
+        } else if (question.format === 'multiple-choice') {
+          expect(new Set(question.config.options)).toHaveLength(4)
+          expect(question.config.optionFeedback).toHaveLength(4)
+          expect(question.config.optionFeedback[question.config.answer]).toBe(question.explanation)
         } else {
-          expect(new Set(question.options)).toHaveLength(4)
-          expect(question.optionFeedback).toHaveLength(4)
-          expect(question.optionFeedback?.[question.answer]).toBe(question.explanation)
+          expect(question.reasoningSkillKeys.length).toBeGreaterThan(0)
         }
       }
     }
@@ -69,17 +74,21 @@ describe('deterministic coaching catalog', () => {
   it('uses reviewed incremental construction for the five roadmap pilots', () => {
     for (const id of CODE_CONSTRUCTION_PILOT_IDS) {
       const problem = problems.find((candidate) => candidate.id === id)!
-      const construction = problem.questions.find(({ format }) => format === 'code-construction')?.construction
-      expect(construction).toBeDefined()
-      expect(construction?.steps.every((step, index) => step.prerequisites.every((required) => construction.steps.findIndex(({ id: stepId }) => stepId === required) < index))).toBe(true)
-      expect(construction?.steps.every(({ choices, correctChoiceId }) => choices.some(({ id: choiceId }) => choiceId === correctChoiceId))).toBe(true)
+      const question = problem.questions.find(({ format }) => format === 'code-construction')
+      expect(question?.format).toBe('code-construction')
+      if (!question || question.format !== 'code-construction') throw new Error('Expected code construction')
+      const construction = question.config
+      expect(construction.steps.every((step, index) => step.prerequisites.every((required) => construction.steps.findIndex(({ id: stepId }) => stepId === required) < index))).toBe(true)
+      expect(construction.steps.every(({ choices, correctChoiceId }) => choices.some(({ id: choiceId }) => choiceId === correctChoiceId))).toBe(true)
     }
   })
 
   it('assembles the curated implementation exactly for every reviewed pilot language', () => {
     for (const id of [1, 3, 704]) {
       const problem = problems.find((candidate) => candidate.id === id)!
-      const construction = problem.questions.find(({ format }) => format === 'code-construction')!.construction!
+      const question = problem.questions.find(({ format }) => format === 'code-construction')
+      if (!question || question.format !== 'code-construction') throw new Error('Expected code construction')
+      const construction = question.config
       for (const language of construction.languages) {
         const assembled = assembleConstructionCode(construction, language)
         if (id === 1 && language === 'Rust') {
@@ -96,7 +105,9 @@ describe('deterministic coaching catalog', () => {
     const genericNames = new Set(['algorithmState', 'currentWork', 'processedWork', 'remainingWork'])
     for (const id of CODE_CONSTRUCTION_PILOT_IDS) {
       const problem = problems.find((candidate) => candidate.id === id)!
-      const frames = compileLessonVisualization(problem).visualization!.frames
+      const question = compileLessonVisualization(problem)
+      if (question.format !== 'iteration-visualization') throw new Error('Expected visualization')
+      const frames = question.config.frames
       expect(frames.every(({ structures }) => structures !== undefined)).toBe(true)
       expect(frames.flatMap(({ variables }) => variables).some(({ name }) => genericNames.has(name))).toBe(false)
       expect(frames.flatMap(({ structures }) => structures ?? []).flatMap(({ items }) => items).length).toBeGreaterThan(0)
@@ -106,7 +117,9 @@ describe('deterministic coaching catalog', () => {
   it('never exposes generalized placeholder variable names', () => {
     const genericNames = new Set(['iteration', 'algorithmState', 'currentWork', 'processedWork', 'remainingWork'])
     for (const problem of problems) {
-      const frames = compileLessonVisualization(problem).visualization!.frames
+      const question = compileLessonVisualization(problem)
+      if (question.format !== 'iteration-visualization') throw new Error('Expected visualization')
+      const frames = question.config.frames
       expect(frames.flatMap(({ variables }) => variables).some(({ name }) => genericNames.has(name))).toBe(false)
     }
   })
@@ -115,7 +128,7 @@ describe('deterministic coaching catalog', () => {
     for (const lesson of lessons) {
       const visualization = lessonVisualizationFor(lesson.slug)
       expect(visualization?.question.format).toBe('iteration-visualization')
-      expect(visualization?.question.visualization?.frames.length).toBeGreaterThanOrEqual(6)
+      expect(visualization?.question.format === 'iteration-visualization' ? visualization.question.config.frames.length : 0).toBeGreaterThanOrEqual(6)
     }
   })
 

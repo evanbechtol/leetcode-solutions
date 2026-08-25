@@ -3,7 +3,9 @@ import type { QuestionType, QuizQuestion } from '../types'
 import { hasDataStructureGateBeforeAlgorithms, sequenceDataStructureBeforeAlgorithms } from './questionSequence'
 
 const item = (id: string, type: QuestionType): QuizQuestion => ({
-  id, type, prompt: id, options: ['A', 'B', 'C', 'D'], answer: 0, explanation: 'Explanation', hint: 'Hint',
+  id, type, format: 'multiple-choice', prompt: id, explanation: 'Explanation', hint: 'Hint',
+  reasoningSkillKeys: ['constraint-signal'], instructionalLevel: 'complete', contentVersion: 'test',
+  config: { options: ['A', 'B', 'C', 'D'], answer: 0, optionFeedback: ['Explanation', 'B', 'C', 'D'], misconceptionLinks: [undefined, undefined, undefined, undefined] },
 })
 
 describe('data-structure sequencing', () => {

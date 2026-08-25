@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { TRACE_PLAYBACK_SPEEDS, useTracePlayback } from '../../composables/useTracePlayback'
-import type { QuestionInteractionState, QuizQuestion } from '../../types'
+import type { QuestionInteractionResult, QuestionInteractionState, QuizQuestion } from '../../types'
 import { evaluateSelectedOption } from '../../utils/questionEvaluation'
 
 const props = defineProps<{ question: QuizQuestion; submitted: boolean; initialState?: QuestionInteractionState | null; lessonMode?: boolean }>()
 const emit = defineEmits<{
-  (event: 'response-change', response: { ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState }): void
+  (event: 'response-change', response: QuestionInteractionResult): void
 }>()
 
 const restored = props.initialState?.format === 'iteration-visualization' ? props.initialState : null
-const config = computed(() => props.question.visualization!)
+const config = computed(() => props.question.format === 'iteration-visualization' ? props.question.config : neverConfig())
+const neverConfig = (): never => { throw new Error('Invalid iteration-visualization question.') }
 const frameCount = computed(() => config.value.frames.length)
 const {
   frameIndex, furthestFrame, playing, speed, reducedMotion, finalFrame,
@@ -23,7 +24,7 @@ const {
 const selectedAnswer = ref<number | null>(restored?.selectedAnswer ?? null)
 const frame = computed(() => config.value.frames[frameIndex.value])
 const codeLines = computed(() => config.value.code.split('\n'))
-const evaluation = computed(() => evaluateSelectedOption(props.question.answer, selectedAnswer.value))
+const evaluation = computed(() => evaluateSelectedOption(config.value.checkpoint.answer, selectedAnswer.value))
 const isCorrect = computed(() => evaluation.value.correct)
 const variableGroups = computed(() => (['input', 'control', 'state', 'output'] as const)
   .map((role) => ({ role, variables: frame.value.variables.filter((item) => item.role === role) }))
@@ -64,11 +65,15 @@ function choose(index: number) {
 }
 
 watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change', {
-  ready: evaluation.value.ready,
+  complete: evaluation.value.ready,
   correct: isCorrect.value,
+  firstAttempt: true,
+  hintLevelReached: 0,
+  diagnosticKeys: evaluation.value.ready && !isCorrect.value ? ['trace:checkpoint'] : [],
+  evidence: { frameIndex: frameIndex.value, furthestFrame: furthestFrame.value, selectedAnswer: selectedAnswer.value },
   feedback: selectedAnswer.value === null
     ? props.question.hint
-    : props.question.optionFeedback?.[selectedAnswer.value] || props.question.hint,
+    : config.value.checkpoint.optionFeedback[selectedAnswer.value] || props.question.hint,
   state: {
     format: 'iteration-visualization',
     frameIndex: frameIndex.value,
@@ -201,13 +206,13 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
       <div class="box-label">Trace checkpoint</div>
       <div class="answer-list" role="radiogroup" :aria-label="question.prompt">
         <button
-          v-for="(option, index) in question.options"
+          v-for="(option, index) in config.checkpoint.options"
           :key="option"
           type="button"
           class="answer-option"
           :class="{
             selected: selectedAnswer === index,
-            correct: submitted && isCorrect && index === question.answer,
+            correct: submitted && isCorrect && index === config.checkpoint.answer,
             wrong: submitted && selectedAnswer === index && !isCorrect,
           }"
           :disabled="submitted"
@@ -217,7 +222,7 @@ watch([frameIndex, furthestFrame, selectedAnswer], () => emit('response-change',
         >
           <span class="option-key">{{ String.fromCharCode(65 + index) }}</span>
           <span>{{ option }}</span>
-          <v-icon v-if="submitted && isCorrect && index === question.answer" icon="mdi-check-circle" color="success" />
+          <v-icon v-if="submitted && isCorrect && index === config.checkpoint.answer" icon="mdi-check-circle" color="success" />
           <v-icon v-else-if="submitted && selectedAnswer === index" icon="mdi-close-circle" color="error" />
         </button>
       </div>
