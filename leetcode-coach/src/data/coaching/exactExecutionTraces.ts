@@ -2,6 +2,7 @@ import type { Problem, VisualizationFrame } from '../../types'
 import { traceToVisualizationFrames } from '../../tracing/compatibility'
 import { registerPilotTraceFixtures } from '../../tracing/fixtures'
 import { exactTraceForProblem } from '../../tracing/registry'
+import { buildRemainingLessonTrace } from './lessonExecutionTraces'
 
 type Variable = VisualizationFrame['variables'][number]
 type Structure = NonNullable<VisualizationFrame['structures']>[number]
@@ -72,6 +73,8 @@ export const buildExactExecutionTrace = (problem: Problem): VisualizationFrame[]
   registerPilotTraceFixtures()
   const typedTrace = exactTraceForProblem(problem.id)
   if (typedTrace) return traceToVisualizationFrames(typedTrace, problem.solutionLanguage ?? 'TypeScript')
+  const remainingLessonTrace = buildRemainingLessonTrace(problem)
+  if (remainingLessonTrace) return remainingLessonTrace
   if (problem.id === 3) return exactLongestSubstring(problem)
   if (problem.id === 102) return exactTreeBfs(problem)
   if (problem.id === 207) return exactCourseSchedule(problem)

@@ -6,7 +6,8 @@ import { validateCoachingContent } from './validation'
 import { hasDataStructureGateBeforeAlgorithms } from '../../utils/questionSequence'
 import { assembleConstructionCode, CODE_CONSTRUCTION_PILOT_IDS } from './codeConstruction'
 import { lessons } from '../lessons'
-import { lessonVisualizationFor } from '../lessonVisualizations'
+import { lessonVisualizationFor, lessonVisualizationProblemIds } from '../lessonVisualizations'
+import { buildExactExecutionTrace } from './exactExecutionTraces'
 
 describe('deterministic coaching catalog', () => {
   it('covers all 134 dataset problems plus two curated-only problems', () => {
@@ -115,6 +116,18 @@ describe('deterministic coaching catalog', () => {
       const visualization = lessonVisualizationFor(lesson.slug)
       expect(visualization?.question.format).toBe('iteration-visualization')
       expect(visualization?.question.visualization?.frames.length).toBeGreaterThanOrEqual(6)
+    }
+  })
+
+  it('uses a reviewed concrete trace for every lesson representative', () => {
+    for (const lesson of lessons) {
+      const problemId = lessonVisualizationProblemIds[lesson.slug]
+      const problem = problems.find(({ id }) => id === problemId)!
+      const frames = buildExactExecutionTrace(problem)
+
+      expect(frames, `${lesson.slug} should never use the generic overview fallback`).not.toBeNull()
+      expect(frames?.at(-1)?.currentOutput).toBe(problem.examples[0].output)
+      expect(frames?.some(({ title }) => title === 'Repeat for the remaining work')).toBe(false)
     }
   })
 })

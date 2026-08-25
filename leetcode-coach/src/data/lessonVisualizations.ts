@@ -14,7 +14,7 @@ export const lessonVisualizationProblemIds: Record<string, number> = {
   'graph-traversal': 127,
   greedy: 121,
   'dynamic-programming': 53,
-  backtracking: 37,
+  backtracking: 46,
 }
 
 export const lessonVisualizationFor = (slug: string) => {
