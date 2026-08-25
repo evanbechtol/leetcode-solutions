@@ -18,6 +18,7 @@ export interface LearnerProfile {
   dailyMinutes: DailyMinutes
   preferredLanguage?: string
   selectedTrackIds: string[]
+  openedLessonSlugs: string[]
   onboardingDecisionIds: string[]
   onboardingStartedAt?: string
   createdAt: string
@@ -210,6 +211,7 @@ export const emptyProgressState = (now = new Date()): ProgressStateV2 => {
       experience: 'new-to-dsa',
       dailyMinutes: 10,
       selectedTrackIds: [],
+      openedLessonSlugs: [],
       onboardingDecisionIds: [],
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -233,6 +235,7 @@ const validLearnerProfile = (value: unknown): value is LearnerProfile => {
     && isDailyMinutes(value.dailyMinutes)
     && (value.preferredLanguage === undefined || isString(value.preferredLanguage))
     && asStringArray(value.selectedTrackIds) !== null
+    && (value.openedLessonSlugs === undefined || asStringArray(value.openedLessonSlugs) !== null)
     && (value.onboardingDecisionIds === undefined || asStringArray(value.onboardingDecisionIds) !== null)
     && (value.onboardingStartedAt === undefined || isString(value.onboardingStartedAt))
     && isString(value.createdAt)
@@ -336,6 +339,7 @@ const normalizeProgressV2 = (state: ProgressStateV2): ProgressStateV2 => ({
   learner: {
     ...state.learner,
     onboardingDecisionIds: state.learner.onboardingDecisionIds ?? [],
+    openedLessonSlugs: state.learner.openedLessonSlugs ?? [],
   },
 })
 
@@ -492,6 +496,7 @@ const isPristineProgress = (state: ProgressStateV2) => state.attempts.length ===
   && state.learner.dailyMinutes === 10
   && state.learner.preferredLanguage === undefined
   && state.learner.selectedTrackIds.length === 0
+  && state.learner.openedLessonSlugs.length === 0
   && state.learner.onboardingDecisionIds.length === 0
   && state.learner.onboardingStartedAt === undefined
 
@@ -503,7 +508,10 @@ export const mergeImportedProgress = (
 ): ProgressStateV2 => compactProgress({
   ...current,
   // Current-browser preferences win. On a new device, the defaults are replaced by imported settings below.
-  learner: isPristineProgress(current) ? imported.learner : current.learner,
+  learner: {
+    ...(isPristineProgress(current) ? imported.learner : current.learner),
+    openedLessonSlugs: [...new Set([...current.learner.openedLessonSlugs, ...imported.learner.openedLessonSlugs])],
+  },
   attempts: uniqueById([...current.attempts, ...eligibleAttempts(imported.attempts, content)]),
   completedProblems: uniqueById([...current.completedProblems, ...eligibleCompletions(imported.completedProblems, content)]),
   repairs: uniqueById([...current.repairs, ...imported.repairs]),
@@ -523,7 +531,7 @@ export const importProgress = (
 ): ProgressImportResult => {
   const parsed = parseJson(raw)
   if (!isProgressStateV2(parsed)) return { state: null, error: 'This file is not a valid Pathfinder progress export.' }
-  return { state: mergeImportedProgress(current, parsed, content, now), error: null }
+  return { state: mergeImportedProgress(current, normalizeProgressV2(parsed), content, now), error: null }
 }
 
 export const serializeProgress = (state: ProgressStateV2) => JSON.stringify(state, null, 2)

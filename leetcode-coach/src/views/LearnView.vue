@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { lessons } from '../data/lessons'
 import { lessonVisualizationFor } from '../data/lessonVisualizations'
 import TreeDiagramNode from '../components/TreeDiagramNode.vue'
 import IterationVisualizationQuestion from '../components/questions/IterationVisualizationQuestion.vue'
+import { useTrainerStore } from '../stores/trainer'
 
 const route = useRoute()
+const store = useTrainerStore()
 const search = ref('')
 const category = ref<'All' | 'Data Structure' | 'Algorithmic Pattern'>('All')
 
@@ -28,6 +30,14 @@ const lessonVisualization = computed(() => {
   if (!lesson.value) return null
   return lessonVisualizationFor(lesson.value.slug)
 })
+const lessonTrack = computed(() => lesson.value ? store.mapForLesson(lesson.value.slug) : null)
+const practiceNode = computed(() => lessonTrack.value?.nodes.find((node) => node.problemId && node.status !== 'stable')
+  ?? lessonTrack.value?.nodes.find((node) => node.problemId)
+  ?? null)
+
+watch(lesson, (current) => {
+  if (current) store.recordLessonOpened(current.slug)
+}, { immediate: true })
 
 function mentalModelParagraphs(model: string | string[]) {
   return Array.isArray(model) ? model : [model]
@@ -270,6 +280,11 @@ function mentalModelParagraphs(model: string | string[]) {
           </section>
 
           <div class="related-topics"><span>Related LeetCode topics</span><v-chip v-for="topic in lesson.relatedTopics" :key="topic" size="small">{{ topic }}</v-chip></div>
+
+          <v-card v-if="lessonTrack && practiceNode" class="lesson-practice-cta pa-5 pa-md-6">
+            <div><span class="eyebrow">Practice this concept</span><h2>{{ practiceNode.title }}</h2><p>{{ practiceNode.description }}</p></div>
+            <div class="d-flex flex-wrap ga-2"><v-btn color="primary" :to="practiceNode.to">Start guided practice</v-btn><v-btn variant="text" :to="`/paths?track=${lessonTrack.track.id}`">View {{ lessonTrack.track.title }} path</v-btn></div>
+          </v-card>
 
           <nav class="lesson-pagination" aria-label="Previous and next lessons">
             <router-link v-if="previousLesson" :to="`/learn/${previousLesson.slug}`"><small>Previous</small><strong><v-icon icon="mdi-arrow-left" size="17" /> {{ previousLesson.title }}</strong></router-link>

@@ -14,6 +14,7 @@ import { dueRepairCardsFor, repairCardsFor, repairTaskFor } from '../utils/repai
 import { questionAnswer, questionMisconceptionLinks } from '../utils/questionConfig'
 import { repairStageForDiagnostics, selectAdaptiveQuestionPath } from '../utils/adaptiveQuestions'
 import { calibrationInsightsFor } from '../utils/confidenceCalibration'
+import { earnedMilestonesFor, mapForLesson, mapForProblem, milestonePresentationForKey, trackMapsFor } from '../utils/learningMap'
 import {
   PROGRESS_V1_STORAGE_KEY,
   PROGRESS_V2_STORAGE_KEY,
@@ -220,8 +221,25 @@ export const useTrainerStore = defineStore('trainer', () => {
       .map(({ problemId }) => problemId))
   })
   const practiceConsistency = computed(() => consistencyFor(progressState.value.dailySessions, todayLocalDay.value))
+  const learningMaps = computed(() => trackMapsFor(progressState.value, learningTracks, problems))
+  const milestoneCandidates = computed(() => earnedMilestonesFor(progressState.value, learningMaps.value, practiceConsistency.value.best))
+  const shareableMilestones = computed(() => {
+    const current = new Map(milestoneCandidates.value.map((milestone) => [milestone.key, milestone]))
+    return progressState.value.milestones
+      .map(({ key }) => current.get(key) ?? milestonePresentationForKey(key, learningMaps.value))
+      .filter((milestone): milestone is NonNullable<typeof milestone> => milestone !== null)
+  })
 
   watch(progressState, () => persistProgress(), { deep: true })
+  watch(milestoneCandidates, (candidates) => {
+    const earnedKeys = new Set(progressState.value.milestones.map(({ key }) => key))
+    for (const candidate of candidates) {
+      if (earnedKeys.has(candidate.key)) continue
+      progressState.value.milestones.push({ id: `milestone:${candidate.key}`, key: candidate.key, earnedAt: new Date().toISOString() })
+      recordProductEvent('milestone_earned', { kind: candidate.kind, track: candidate.track ?? '' })
+      earnedKeys.add(candidate.key)
+    }
+  }, { immediate: true })
   watch(quizCache, () => storage.setItem(QUIZ_CACHE_KEY, JSON.stringify(quizCache.value)), { deep: true })
   watch([
     currentProblemId,
@@ -324,6 +342,14 @@ export const useTrainerStore = defineStore('trainer', () => {
       selectedTrackIds: preferences.selectedTrackIds ? [...new Set(preferences.selectedTrackIds)] : progressState.value.learner.selectedTrackIds,
       updatedAt: new Date().toISOString(),
     }
+  }
+
+  function recordLessonOpened(lessonSlug: string) {
+    if (progressState.value.learner.openedLessonSlugs.includes(lessonSlug)) return false
+    progressState.value.learner.openedLessonSlugs.push(lessonSlug)
+    progressState.value.learner.updatedAt = new Date().toISOString()
+    recordProductEvent('lesson_opened', { lessonSlug })
+    return true
   }
 
   function beginOnboarding(preferences: LearnerPreferences) {
@@ -724,10 +750,12 @@ export const useTrainerStore = defineStore('trainer', () => {
     currentProblemId, currentQuestionIndex, selectedAnswer, submitted, answerCorrect,
     firstTryCorrect, revealedHintCount, confidence, interactionState, problemComplete, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
     totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, reasoningSkillStats, confidenceInsights, topicMastery, aiCoachEnabled, catalogSize: problems.length,
-    todaySession, todayTasks, practiceConsistency, repairCards, dueRepairCards,
+    todaySession, todayTasks, practiceConsistency, repairCards, dueRepairCards, learningMaps, shareableMilestones,
     startProblem, pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, submitInteraction, tryAgain,
     setInteractionState, revealNextHint, nextQuestion, resetProgress, exportProgressData, exportRecoveryData, importProgressData, recordProductEvent,
-    updateLearnerProfile, beginOnboarding, recordOnboardingAnswer, recordOnboardingInteraction, advanceOnboardingDecision, completeOnboarding, skipOnboarding, restartOnboarding,
+    updateLearnerProfile, recordLessonOpened, beginOnboarding, recordOnboardingAnswer, recordOnboardingInteraction, advanceOnboardingDecision, completeOnboarding, skipOnboarding, restartOnboarding,
     ensureTodaySession, beginDailyTask, completeDailyTask, rebuildTodaySession, snoozeRepair,
+    mapForLesson: (lessonSlug: string) => mapForLesson(learningMaps.value, lessonSlug),
+    mapForProblem: (problemId: number) => mapForProblem(learningMaps.value, problemId),
   }
 })

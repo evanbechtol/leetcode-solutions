@@ -235,7 +235,7 @@ async function openRepair(lessonSlug: string, repairId: string) {
             <small v-if="card.contentUpdated"><v-icon icon="mdi-history" size="14" /> Content has been updated since this answer; this uses the current reviewed explanation.</small>
             <small v-else><v-icon icon="mdi-repeat" size="14" /> {{ card.repeatCount }} recorded {{ card.repeatCount === 1 ? 'decision' : 'decisions' }} of this kind</small>
           </div>
-          <div class="repair-card-actions"><v-btn color="primary" size="small" @click="openRepair(card.lessonSlug, card.id)">{{ card.repairMode === 'trace' ? 'Open trace lesson' : 'Review lesson' }}</v-btn><v-btn v-if="card.status !== 'validated'" variant="text" size="small" @click="store.snoozeRepair(card.id)">Snooze 7 days</v-btn></div>
+          <div class="repair-card-actions"><v-btn color="primary" size="small" @click="openRepair(card.lessonSlug, card.id)">{{ card.repairMode === 'trace' ? 'Open trace lesson' : 'Review lesson' }}</v-btn><v-btn variant="text" size="small" :to="`/paths?track=${store.mapForLesson(card.lessonSlug)?.track.id ?? ''}`">View learning map</v-btn><v-btn v-if="card.status !== 'validated'" variant="text" size="small" @click="store.snoozeRepair(card.id)">Snooze 7 days</v-btn></div>
         </article>
       </div>
       <div v-else-if="store.repairCards.length" class="repair-empty mt-6">No cards match these filters.</div>

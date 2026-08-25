@@ -61,6 +61,7 @@ function rebuild() {
 
     <section class="today-session mt-8">
       <div class="section-heading"><div><span class="eyebrow">Your plan</span><h2>Why these tasks?</h2><p class="section-copy">Tasks come from your selected track and existing learning history. Pathfinder does not invent activity just to fill a session.</p></div><v-btn v-if="session?.status === 'planned' && !session.rebuildCount" variant="text" size="small" prepend-icon="mdi-refresh" @click="rebuild">Rebuild once</v-btn></div>
+      <v-btn class="mt-3" variant="text" size="small" prepend-icon="mdi-map-marker-path" to="/paths">See how today’s work fits your learning map</v-btn>
       <v-alert v-if="rebuilt" class="mt-5" density="compact" type="success" variant="tonal">Your unstarted session was rebuilt with a different first task.</v-alert>
       <div v-if="tasks.length" class="today-task-list mt-6">
         <article v-for="(task, index) in tasks" :key="task.id" class="today-task" :class="{ completed: task.completed }">

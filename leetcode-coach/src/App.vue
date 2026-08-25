@@ -6,6 +6,7 @@ const store = useTrainerStore()
 const mobileNavOpen = ref(false)
 const navigation = [
   { to: '/today', label: 'Today', description: 'Complete a small mastery session', icon: 'mdi-calendar-check-outline' },
+  { to: '/paths', label: 'Paths', description: 'Follow the learning map', icon: 'mdi-map-marker-path' },
   { to: '/', label: 'Practice', description: 'Start a guided problem', icon: 'mdi-compass-outline' },
   { to: '/problems', label: 'Problems', description: 'Browse all 136 problems', icon: 'mdi-format-list-bulleted' },
   { to: '/learn', label: 'Learn', description: 'Study data structures and algorithms', icon: 'mdi-book-open-page-variant-outline' },

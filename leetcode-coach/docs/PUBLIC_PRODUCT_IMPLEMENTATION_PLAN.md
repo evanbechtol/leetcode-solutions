@@ -323,7 +323,7 @@ Avoid personality claims, numeric learner rankings, or mental-health language.
 
 ## Milestone 5 — Learning map, tracks, and milestone sharing
 
-**Status:** Planned.
+**Status:** Complete (verified August 25, 2026). The eight authored foundation tracks now power `/paths`, shared lesson/repair/daily destinations, deterministic local evidence states, and privacy-safe local SVG milestone cards.
 
 **Priority:** P1. **Depends on:** Milestones 1–4. **Strategy tested:** Beginners return when progress is visible as connected capabilities rather than a flat count of problems completed.
 
