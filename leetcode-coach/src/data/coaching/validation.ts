@@ -5,6 +5,7 @@ import { patternProfiles, rawTagPatternMap } from './patterns'
 import { beginnerPatternProfiles } from './beginnerProfiles'
 import { hasDataStructureGateBeforeAlgorithms } from '../../utils/questionSequence'
 import { assembleConstructionCode } from './codeConstruction'
+import { lessons } from '../lessons'
 
 const wordCount = (value: string) => value.trim().split(/\s+/).filter(Boolean).length
 
@@ -13,6 +14,7 @@ export const validateCoachingContent = (problems: Problem[]) => {
   // The external dataset contains 134 entries; two curated-only problems (121 and 704) bring the merged catalog to 136.
   if (problems.length !== 136) errors.push(`Expected 136 merged catalog problems; found ${problems.length}.`)
   const catalogIds = new Set(problems.map(({ id }) => id))
+  const lessonSlugs = new Set(lessons.map(({ slug }) => slug))
   for (const pattern of Object.keys(patternProfiles)) {
     const beginner = beginnerPatternProfiles[pattern as keyof typeof beginnerPatternProfiles]
     if (!beginner) {
@@ -101,6 +103,9 @@ export const validateCoachingContent = (problems: Problem[]) => {
         if (question.options.length !== 4 || new Set(question.options).size !== 4) errors.push(`${question.id}: options must contain four unique values.`)
         if (question.answer < 0 || question.answer > 3) errors.push(`${question.id}: answer is out of bounds.`)
         if (question.optionFeedback?.length !== 4) errors.push(`${question.id}: missing option-specific feedback.`)
+        if (question.misconceptionLinks?.length !== 4) errors.push(`${question.id}: missing option-level repair metadata.`)
+        if (question.misconceptionLinks?.some((link, index) => index === question.answer ? link !== undefined : !link || !lessonSlugs.has(link.lessonSlug))) errors.push(`${question.id}: repair metadata needs one valid lesson destination for every incorrect option.`)
+        if (DEEP_PROBLEM_IDS.has(problem.id) && question.misconceptionLinks?.some((link, index) => index !== question.answer && link?.specificity !== 'reviewed-option')) errors.push(`${question.id}: deep coaching paths require reviewed option-level repair metadata.`)
         if (!['contract', 'time-complexity', 'space-complexity'].includes(question.stage ?? '') && question.options.some((option) => wordCount(option) > 32)) errors.push(`${question.id}: answer option exceeds 32 words.`)
       }
       if (format === 'iteration-visualization') {

@@ -35,6 +35,7 @@ const hintLoading = ref(false)
 const quizLoading = ref(false)
 const quizError = ref('')
 const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
+const dailyTaskId = computed(() => typeof route.query.dailyTask === 'string' ? route.query.dailyTask : null)
 const questionPanel = ref<HTMLElement | null>(null)
 const interactionKey = ref(0)
 const interactionResponse = ref<{ ready: boolean; correct: boolean; feedback: string; state: QuestionInteractionState | null }>({
@@ -115,6 +116,10 @@ function updateInteraction(response: { ready: boolean; correct: boolean; feedbac
 }
 
 async function start() {
+  if (store.progressState.learner.onboardingStatus !== 'complete') {
+    await router.push({ name: 'start' })
+    return
+  }
   aiHint.value = ''
   quizError.value = ''
   resetInteraction()
@@ -126,6 +131,10 @@ async function start() {
 watch(() => route.params.problemId, async (routeValue) => {
   if (routeValue === undefined) {
     store.clearCurrentProblem()
+    if (store.progressState.learner.onboardingStatus !== 'complete') {
+      await router.replace({ name: 'start' })
+      return
+    }
     document.title = 'Pathfinder — LeetCode Coach'
     return
   }
@@ -187,7 +196,10 @@ async function continueQuiz() {
   resetInteraction()
   await nextTick()
   if (hasNextQuestion) scrollQuestionToTop()
-  else scrollPageToTop()
+  else {
+    if (dailyTaskId.value) store.completeDailyTask(dailyTaskId.value)
+    scrollPageToTop()
+  }
 }
 
 onBeforeRouteLeave(() => {
@@ -421,8 +433,9 @@ async function copySolution() {
               <pre><code class="hljs" :class="`language-${highlightLanguage}`" v-html="highlightedSolution" /></pre>
             </div>
             <div class="d-flex flex-wrap justify-center ga-3 mt-7">
+              <v-btn v-if="dailyTaskId" color="primary" size="large" to="/today" prepend-icon="mdi-calendar-check-outline">Back to today</v-btn>
               <v-btn variant="outlined" size="large" to="/profile" prepend-icon="mdi-chart-donut">View progress</v-btn>
-              <v-btn color="primary" size="large" append-icon="mdi-shuffle-variant" @click="start">Another problem</v-btn>
+              <v-btn v-if="!dailyTaskId" color="primary" size="large" append-icon="mdi-shuffle-variant" @click="start">Another problem</v-btn>
             </div>
           </v-card>
         </template>

@@ -13,6 +13,7 @@ import { DEEP_PROBLEM_IDS, problemTeachingFacts } from './problemFacts'
 import { patternProfiles, type PatternProfile } from './patterns'
 import { buildExecutionTrace } from './executionTrace'
 import { codeConstructionByProblemId } from './codeConstruction'
+import { categoryRepairLink } from '../repairMetadata'
 
 interface Choice { text: string; correct: boolean; feedback: string }
 interface Guidance { teachingContext: TeachingContext; formalTerm: FormalTerm }
@@ -141,6 +142,10 @@ const question = (
     readingLevelNotes: readingLevelNotes[stage],
     ...learnerGuidance,
     optionFeedback: choices.map(({ feedback }) => feedback),
+    misconceptionLinks: choices.map((choice) => choice.correct
+      ? undefined
+      : categoryRepairLink(problem, stage, DEEP_PROBLEM_IDS.has(problem.id) ? 'reviewed-option' : 'category'),
+    ),
   }
 }
 

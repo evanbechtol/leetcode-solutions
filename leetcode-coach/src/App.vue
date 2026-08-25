@@ -5,6 +5,7 @@ import { useTrainerStore } from './stores/trainer'
 const store = useTrainerStore()
 const mobileNavOpen = ref(false)
 const navigation = [
+  { to: '/today', label: 'Today', description: 'Complete a small mastery session', icon: 'mdi-calendar-check-outline' },
   { to: '/', label: 'Practice', description: 'Start a guided problem', icon: 'mdi-compass-outline' },
   { to: '/problems', label: 'Problems', description: 'Browse all 136 problems', icon: 'mdi-format-list-bulleted' },
   { to: '/learn', label: 'Learn', description: 'Study data structures and algorithms', icon: 'mdi-book-open-page-variant-outline' },
@@ -25,7 +26,7 @@ const navigation = [
         <nav class="nav-pills" aria-label="Primary navigation">
           <router-link v-for="item in navigation" :key="item.to" :to="item.to" class="nav-link"><v-icon :icon="item.icon" size="19" /> {{ item.label }}</router-link>
         </nav>
-        <div class="streak-pill top-streak ml-3 ml-md-6"><span>◆</span> {{ store.streak }} <span class="streak-label">streak</span></div>
+        <div class="streak-pill top-streak ml-3 ml-md-6"><span>◆</span> {{ store.practiceConsistency.current }} <span class="streak-label">practice</span></div>
         <v-btn class="mobile-nav-trigger" icon="mdi-menu" variant="text" aria-label="Open navigation menu" @click="mobileNavOpen = true" />
       </div>
     </v-app-bar>
@@ -36,7 +37,7 @@ const navigation = [
       </div>
       <div class="mobile-nav-streak">
         <span class="mobile-streak-icon">◆</span>
-        <div><strong>{{ store.streak }} day streak</strong><small>Keep building the habit.</small></div>
+        <div><strong>{{ store.practiceConsistency.current }} day practice run</strong><small>A missed day pauses it; your learning remains.</small></div>
       </div>
       <nav class="mobile-nav-list" aria-label="Mobile navigation">
         <router-link v-for="item in navigation" :key="item.to" :to="item.to" class="mobile-nav-link" @click="mobileNavOpen = false">

@@ -4,6 +4,8 @@ Last updated: August 24, 2026
 
 This document is the planning source of truth for Pathfinder. It describes the current product, the intended learning experience, future question formats, platform capabilities, quality gates, and the order in which work should be considered. It is a roadmap rather than a delivery-date commitment.
 
+For the public-ready delivery sequence that turns these capabilities into a cohesive beginner retention loop, see the [Public Product Implementation Plan](PUBLIC_PRODUCT_IMPLEMENTATION_PLAN.md).
+
 ## Status labels
 
 | Status | Meaning |

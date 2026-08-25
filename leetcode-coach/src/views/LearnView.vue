@@ -11,6 +11,7 @@ const search = ref('')
 const category = ref<'All' | 'Data Structure' | 'Algorithmic Pattern'>('All')
 
 const lesson = computed(() => lessons.find((item) => item.slug === route.params.slug))
+const isRepairReview = computed(() => typeof route.query.repair === 'string')
 const lessonIndex = computed(() => lessons.findIndex((item) => item.slug === route.params.slug))
 const previousLesson = computed(() => lessonIndex.value > 0 ? lessons[lessonIndex.value - 1] : undefined)
 const nextLesson = computed(() => lessonIndex.value >= 0 && lessonIndex.value < lessons.length - 1 ? lessons[lessonIndex.value + 1] : undefined)
@@ -119,6 +120,11 @@ function mentalModelParagraphs(model: string | string[]) {
             </div>
             <p class="reader-summary">{{ lesson.summary }}</p>
           </header>
+
+          <v-alert v-if="isRepairReview" class="repair-return-banner" density="comfortable" variant="tonal" type="info" icon="mdi-wrench-check-outline">
+            You are reviewing one focused concept from your Error Atlas. Take the lesson at your pace, then return when you are ready.
+            <template #append><v-btn size="small" variant="text" to="/profile">Back to Error Atlas</v-btn></template>
+          </v-alert>
 
           <section class="lesson-section mental-model">
             <div class="section-heading-row"><span>01</span><div><div class="eyebrow">Mental model</div><h2>Make it intuitive</h2></div></div>

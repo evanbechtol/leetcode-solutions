@@ -37,9 +37,14 @@ const router = createRouter({
     { path: '/problems', name: 'problems', component: () => import('./views/ProblemsView.vue') },
     { path: '/problems/:problemId(\\d+)', name: 'problem', component: QuizView },
     { path: '/problems/:pathMatch(.*)*', redirect: { name: 'practice' } },
+    { path: '/start', name: 'start', component: () => import('./views/OnboardingView.vue') },
+    { path: '/today', name: 'today', component: () => import('./views/TodayView.vue') },
     { path: '/learn/:slug?', name: 'learn', component: () => import('./views/LearnView.vue') },
     { path: '/cheat-sheet', name: 'cheat-sheet', component: () => import('./views/CheatSheetView.vue') },
     { path: '/profile', component: ProfileView },
+    ...(import.meta.env.DEV ? [
+      { path: '/__dev/progress', name: 'dev-progress', component: () => import('./views/DevProgressView.vue') },
+    ] : []),
   ],
 })
 

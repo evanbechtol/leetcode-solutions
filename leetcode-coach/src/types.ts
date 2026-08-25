@@ -142,6 +142,17 @@ export interface HintLevel {
   text: string
 }
 
+export type RepairMode = 'lesson' | 'trace' | 'retry' | 'transfer'
+
+export interface MisconceptionLink {
+  key: string
+  label: string
+  conceptKey: string
+  lessonSlug: string
+  repairMode: RepairMode
+  specificity: 'reviewed-option' | 'category'
+}
+
 export interface QuizQuestion {
   id: string
   type: QuestionType | LegacyQuestionType
@@ -158,6 +169,7 @@ export interface QuizQuestion {
   teachingContext?: TeachingContext
   formalTerm?: FormalTerm
   optionFeedback?: string[]
+  misconceptionLinks?: Array<MisconceptionLink | undefined>
   builder?: AlgorithmBuilderConfig
   construction?: CodeConstructionConfig
   visualization?: IterationVisualizationConfig

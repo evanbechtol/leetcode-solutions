@@ -2,7 +2,7 @@
 
 A guided, gamified LeetCode practice app built with Vue 3, TypeScript, Pinia, Vuetify, and SCSS.
 
-See the [product roadmap](docs/PRODUCT_ROADMAP.md) for the current capability baseline, planned question formats, accuracy gates, and longer-term platform direction.
+See the [product roadmap](docs/PRODUCT_ROADMAP.md) for the current capability baseline, planned question formats, accuracy gates, and longer-term platform direction. The iterative [public product implementation plan](docs/PUBLIC_PRODUCT_IMPLEMENTATION_PLAN.md) details the path from the current static app to a beginner-focused public MVP.
 
 ## Run locally
 

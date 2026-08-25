@@ -3,6 +3,10 @@ import { nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AnswerRecord } from '../types'
 import { ACTIVE_PROBLEM_SESSION_KEY } from '../utils/activeProblemSession'
+import { onboardingDecisions } from '../data/onboarding'
+import { categoryRepairLink } from '../data/repairMetadata'
+import { problems } from '../data/problems'
+import { PROGRESS_V1_STORAGE_KEY, PROGRESS_V2_STORAGE_KEY } from './progress'
 import { normalizeAnswerRecord, QUESTION_FORMATS, QUESTION_TYPES, useTrainerStore } from './trainer'
 
 const legacy = (questionType: AnswerRecord['questionType']): AnswerRecord => ({
@@ -115,5 +119,145 @@ describe('active problem persistence', () => {
     store.clearCurrentProblem()
     await nextTick()
     expect(values.has(ACTIVE_PROBLEM_SESSION_KEY)).toBe(false)
+  })
+
+  it('migrates the existing V1 payload into V2 before practice continues', () => {
+    values.set(PROGRESS_V1_STORAGE_KEY, JSON.stringify({
+      answers: [legacy('Pattern')],
+      results: [{ problemId: 1, completedAt: '2026-01-01T00:00:00.000Z', correct: 3, total: 9 }],
+      streak: 2,
+      bestStreak: 5,
+    }))
+
+    const store = useTrainerStore()
+
+    expect(store.answers).toHaveLength(1)
+    expect(store.results).toHaveLength(1)
+    expect(store.streak).toBe(2)
+    expect(store.bestStreak).toBe(5)
+    expect(store.progressState.repairs).toEqual([])
+    expect(values.has(PROGRESS_V1_STORAGE_KEY)).toBe(false)
+    expect(JSON.parse(values.get(PROGRESS_V2_STORAGE_KEY) || '{}').version).toBe(2)
+  })
+
+  it('records the selected option, hint use, topic evidence, and reviewed content version in V2 attempts', () => {
+    const store = useTrainerStore()
+    store.startProblem(1)
+    store.revealNextHint()
+    store.selectedAnswer = store.currentQuestion!.answer
+
+    expect(store.submitAnswer()).toBe(true)
+
+    expect(store.progressState.attempts).toHaveLength(1)
+    expect(store.progressState.attempts[0]).toMatchObject({
+      problemId: 1,
+      selectedOptionIndex: store.currentQuestion!.answer,
+      hintLevelReached: 1,
+      firstAttempt: true,
+      source: 'practice',
+      topicKeys: ['Array', 'Hash Table'],
+      contentVersion: '2026-08-24',
+    })
+  })
+
+  it('exports and imports V2 progress without duplicating stable attempt IDs', () => {
+    const store = useTrainerStore()
+    store.startProblem(1)
+    store.selectedAnswer = store.currentQuestion!.answer
+    store.submitAnswer()
+    const exported = store.exportProgressData()
+
+    expect(store.importProgressData(exported)).toEqual({ ok: true, error: null })
+    expect(store.progressState.attempts).toHaveLength(1)
+  })
+
+  it('persists an in-progress onboarding decision so a refresh can resume it', () => {
+    const store = useTrainerStore()
+    store.beginOnboarding({ experience: 'new-to-dsa', dailyMinutes: 5, preferredLanguage: 'Python', selectedTrackIds: ['arrays'] })
+    const firstDecision = onboardingDecisions[0]
+    store.recordOnboardingAnswer(firstDecision.problem.id, firstDecision.question, firstDecision.question.answer)
+    store.advanceOnboardingDecision(firstDecision.question.id)
+
+    expect(store.progressState.learner).toMatchObject({
+      onboardingStatus: 'in-progress',
+      dailyMinutes: 5,
+      preferredLanguage: 'Python',
+      selectedTrackIds: ['arrays'],
+      onboardingDecisionIds: [firstDecision.question.id],
+    })
+    expect(store.progressState.attempts.at(-1)).toMatchObject({
+      source: 'onboarding',
+      questionId: firstDecision.question.id,
+      correct: true,
+    })
+  })
+
+  it('creates, resumes, and completes a local daily session without changing the answer streak', () => {
+    const store = useTrainerStore()
+    store.updateLearnerProfile({ selectedTrackIds: ['arrays'], dailyMinutes: 5 })
+    const session = store.ensureTodaySession()
+    const originalStreak = store.streak
+
+    expect(session.taskIds).toEqual(['lesson:arrays-hash-maps', 'problem:1'])
+    expect(store.ensureTodaySession().id).toBe(session.id)
+    expect(store.completeDailyTask(session.taskIds[0])).toBe(true)
+    expect(store.streak).toBe(originalStreak)
+    expect(store.todaySession?.status).toBe('in-progress')
+    expect(store.completeDailyTask(session.taskIds[1])).toBe(true)
+    expect(store.todaySession?.status).toBe('complete')
+    expect(store.practiceConsistency.current).toBe(1)
+  })
+
+  it('opens a safe repair after an incorrect reviewed decision and moves it through the daily review lifecycle', () => {
+    const store = useTrainerStore()
+    store.startProblem(1)
+    const wrongOption = (store.currentQuestion!.answer + 1) % store.currentQuestion!.options.length
+    store.selectedAnswer = wrongOption
+
+    expect(store.submitAnswer()).toBe(false)
+    expect(store.repairCards).toHaveLength(1)
+    expect(store.repairCards[0]).toMatchObject({ label: 'Practice this concept', status: 'open', sourceProblemId: 1 })
+
+    const session = store.ensureTodaySession()
+    const repairTask = session.taskIds.find((id) => id.startsWith('repair:'))!
+    expect(store.beginDailyTask(repairTask)).toBe(true)
+    expect(store.repairCards[0].status).toBe('scheduled')
+    expect(store.completeDailyTask(repairTask)).toBe(true)
+    expect(store.repairCards[0].status).toBe('revisited')
+
+    expect(store.snoozeRepair(store.repairCards[0].id)).toBe(true)
+    expect(store.repairCards[0].snoozed).toBe(true)
+
+    store.tryAgain()
+    store.selectedAnswer = wrongOption
+    expect(store.submitAnswer()).toBe(false)
+    expect(store.repairCards[0]).toMatchObject({ status: 'open', snoozed: false, repeatCount: 2 })
+  })
+
+  it('validates a revisited repair only after a first-try, different-day transfer decision', () => {
+    const store = useTrainerStore()
+    store.startProblem(1)
+    store.selectedAnswer = (store.currentQuestion!.answer + 1) % store.currentQuestion!.options.length
+    store.submitAnswer()
+    const repair = store.progressState.repairs[0]
+    const source = store.progressState.attempts.find(({ id }) => id === repair.sourceAttemptId)!
+    source.localDay = '2026-08-23'
+    source.occurredAt = '2026-08-23T12:00:00.000Z'
+    repair.status = 'revisited'
+
+    const session = store.ensureTodaySession()
+    session.taskIds = [`repair-retrieval:${repair.id}:121`]
+    session.completedTaskIds = []
+    session.status = 'planned'
+    store.startProblem(121)
+    expect(store.todayTasks[0]).toMatchObject({ id: `repair-retrieval:${repair.id}:121`, problemId: 121 })
+    expect(store.currentQuestion?.stage).toBe('contract')
+    expect(repair.misconceptionKey).toBe(categoryRepairLink(problems.find(({ id }) => id === 1)!, 'contract').key)
+    expect(categoryRepairLink(problems.find(({ id }) => id === 121)!, 'contract').key).toBe(repair.misconceptionKey)
+    store.selectedAnswer = store.currentQuestion!.answer
+
+    expect(store.submitAnswer()).toBe(true)
+    expect(store.progressState.attempts.at(-1)?.source).toBe('daily-session')
+    expect(store.progressState.repairs[0]).toMatchObject({ status: 'validated', validatedAt: expect.any(String) })
   })
 })

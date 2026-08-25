@@ -1,12 +1,36 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { problems } from '../data/problems'
+import { learningTracks } from '../data/tracks'
+import { COACHING_CONTENT_VERSION } from '../data/coaching/contentVersion'
+import { categoryRepairLink } from '../data/repairMetadata'
 import type { AnswerRecord, Filters, ProblemResult, QuestionFormat, QuestionInteractionState, QuestionType, QuizQuestion } from '../types'
 import { drawRandomProblem } from '../utils/randomSelection'
 import { hasDataStructureGateBeforeAlgorithms, sequenceDataStructureBeforeAlgorithms } from '../utils/questionSequence'
 import { ACTIVE_PROBLEM_SESSION_KEY, parseActiveProblemSession } from '../utils/activeProblemSession'
+import { consistencyFor, planDailyTasks, taskForId, type DailyTask } from '../utils/dailySession'
+import { dueRepairCardsFor, repairCardsFor, repairTaskFor } from '../utils/repairSelectors'
+import {
+  PROGRESS_V1_STORAGE_KEY,
+  PROGRESS_V2_STORAGE_KEY,
+  compactProgress,
+  createAttempt,
+  createCompletion,
+  createProductEvent,
+  createRepair,
+  emptyProgressState,
+  importProgress,
+  localDayFor,
+  loadProgressState,
+  serializeProgress,
+  type ProgressContentIndex,
+  type DailySessionRecord,
+  type LearnerProfile,
+  type ProgressRecovery,
+  type ProgressStateV2,
+  type StorageLike,
+} from './progress'
 
-const STORAGE_KEY = 'pathfinder-progress-v1'
 const QUIZ_CACHE_KEY = 'pathfinder-generated-quizzes-v1'
 const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
 export const QUESTION_TYPES: QuestionType[] = ['Comprehension', 'Pattern', 'Data Structure', 'Invariant', 'Algorithm', 'Correctness', 'Complexity']
@@ -16,26 +40,13 @@ export const QUESTION_FORMATS: Array<{ format: QuestionFormat; label: string }> 
   { format: 'code-construction', label: 'Construct the code' },
 ]
 
-interface PersistedProgress {
-  answers: AnswerRecord[]
-  results: ProblemResult[]
-  streak: number
-  bestStreak: number
+const progressContentIndex: ProgressContentIndex = {
+  problemTopics: Object.fromEntries(problems.map((problem) => [problem.id, [...problem.topics]])),
+  knownProblemIds: new Set(problems.map(({ id }) => id)),
+  knownQuestionIds: Object.fromEntries(problems.map((problem) => [problem.id, new Set(problem.questions.map(({ id }) => id))])),
 }
 
-function loadProgress(): PersistedProgress {
-  try {
-    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '')
-    return {
-      answers: Array.isArray(value.answers) ? value.answers.map(normalizeAnswerRecord) : [],
-      results: Array.isArray(value.results) ? value.results : [],
-      streak: Number(value.streak) || 0,
-      bestStreak: Number(value.bestStreak) || 0,
-    }
-  } catch {
-    return { answers: [], results: [], streak: 0, bestStreak: 0 }
-  }
-}
+const localStorageFor = (): StorageLike => globalThis.localStorage as StorageLike
 
 export function normalizeAnswerRecord(answer: AnswerRecord): AnswerRecord {
   if (answer.questionType === 'Time Complexity' || answer.questionType === 'Space Complexity') {
@@ -44,12 +55,48 @@ export function normalizeAnswerRecord(answer: AnswerRecord): AnswerRecord {
   return { ...answer, questionFormat: answer.questionFormat ?? 'multiple-choice' }
 }
 
+type LearnerPreferences = Pick<LearnerProfile, 'experience' | 'dailyMinutes' | 'preferredLanguage' | 'selectedTrackIds'>
+
+const toAnswerRecord = (attempt: ProgressStateV2['attempts'][number]): AnswerRecord => ({
+  problemId: attempt.problemId,
+  questionId: attempt.questionId,
+  questionType: attempt.questionType,
+  questionFormat: attempt.questionFormat,
+  correct: attempt.correct,
+  answeredAt: attempt.occurredAt,
+})
+
+const toProblemResult = (completion: ProgressStateV2['completedProblems'][number]): ProblemResult => ({
+  problemId: completion.problemId,
+  completedAt: completion.completedAt,
+  correct: completion.correct,
+  total: completion.total,
+})
+
+const normalizedQuestionType = (question: QuizQuestion): QuestionType => {
+  if (question.type === 'Time Complexity' || question.type === 'Space Complexity') return 'Complexity'
+  return question.type
+}
+
+const repairIdForTask = (taskId: string) => {
+  if (taskId.startsWith('repair:')) return taskId.slice('repair:'.length)
+  if (taskId.startsWith('repair-retrieval:')) return taskId.split(':')[1] ?? null
+  return null
+}
+
 export const useTrainerStore = defineStore('trainer', () => {
-  const saved = loadProgress()
-  const answers = ref<AnswerRecord[]>(saved.answers)
-  const results = ref<ProblemResult[]>(saved.results)
-  const streak = ref(saved.streak)
-  const bestStreak = ref(saved.bestStreak)
+  const storage = localStorageFor()
+  const loadedProgress = loadProgressState(storage, progressContentIndex)
+  const progressState = ref<ProgressStateV2>(loadedProgress.state)
+  const progressRecovery = ref<ProgressRecovery | null>(loadedProgress.recovery)
+  const progressMigrationStatus = loadedProgress.migratedFromV1
+    ? 'migrated-from-v1'
+    : loadedProgress.recovery
+      ? 'recovery-required'
+      : storage.getItem(PROGRESS_V2_STORAGE_KEY)
+        ? 'loaded-v2'
+        : 'new'
+  const progressStorageError = ref<string | null>(null)
   const currentProblemId = ref<number | null>(null)
   const currentQuestionIndex = ref(0)
   const selectedAnswer = ref<number | null>(null)
@@ -62,13 +109,32 @@ export const useTrainerStore = defineStore('trainer', () => {
   const problemComplete = ref(false)
   const activeQuestions = ref<QuizQuestion[]>([])
   const quizCache = ref<Record<number, QuizQuestion[]>>((() => {
-    try { return JSON.parse(localStorage.getItem(QUIZ_CACHE_KEY) || '{}') }
+    try { return JSON.parse(storage.getItem(QUIZ_CACHE_KEY) || '{}') }
     catch { return {} }
   })())
   const filters = ref<Filters>({ difficulties: [], sets: [], topics: [], algorithms: [] })
   let problemQueue: number[] = []
   let problemPoolKey = ''
 
+  function persistProgress() {
+    const compacted = compactProgress(progressState.value)
+    if (compacted !== progressState.value) progressState.value = compacted
+    try {
+      storage.setItem(PROGRESS_V2_STORAGE_KEY, serializeProgress(compacted))
+      progressStorageError.value = null
+      return true
+    } catch {
+      progressStorageError.value = 'Progress could not be saved in this browser. Export a backup before clearing site data.'
+      return false
+    }
+  }
+
+  if (loadedProgress.migratedFromV1 && persistProgress()) storage.removeItem(PROGRESS_V1_STORAGE_KEY)
+
+  const answers = computed(() => progressState.value.attempts.map(toAnswerRecord))
+  const results = computed(() => progressState.value.completedProblems.map(toProblemResult))
+  const streak = computed(() => progressState.value.legacyAnswerStreak)
+  const bestStreak = computed(() => progressState.value.legacyBestAnswerStreak)
   const currentProblem = computed(() => problems.find((problem) => problem.id === currentProblemId.value) ?? null)
   const currentQuestion = computed(() => activeQuestions.value[currentQuestionIndex.value] ?? null)
   const questionCount = computed(() => activeQuestions.value.length)
@@ -83,13 +149,11 @@ export const useTrainerStore = defineStore('trainer', () => {
   const totalCorrect = computed(() => answers.value.filter((answer) => answer.correct).length)
   const accuracy = computed(() => answers.value.length ? Math.round((totalCorrect.value / answers.value.length) * 100) : 0)
   const completedProblemIds = computed(() => new Set(results.value.map((result) => result.problemId)))
-  const typeStats = computed(() => {
-    return QUESTION_TYPES.map((type) => {
-      const relevant = answers.value.filter((answer) => answer.questionType === type)
-      const correct = relevant.filter((answer) => answer.correct).length
-      return { type, correct, total: relevant.length, accuracy: relevant.length ? Math.round((correct / relevant.length) * 100) : 0 }
-    })
-  })
+  const typeStats = computed(() => QUESTION_TYPES.map((type) => {
+    const relevant = answers.value.filter((answer) => answer.questionType === type)
+    const correct = relevant.filter((answer) => answer.correct).length
+    return { type, correct, total: relevant.length, accuracy: relevant.length ? Math.round((correct / relevant.length) * 100) : 0 }
+  }))
   const formatStats = computed(() => QUESTION_FORMATS.map(({ format, label }) => {
     const relevant = answers.value.filter((answer) => (answer.questionFormat ?? 'multiple-choice') === format)
     const correct = relevant.filter((answer) => answer.correct).length
@@ -104,12 +168,31 @@ export const useTrainerStore = defineStore('trainer', () => {
       return { topic, completed, total, progress: total ? Math.round((completed / total) * 100) : 0, mastered: total > 0 && completed === total }
     })
   })
+  const todayLocalDay = computed(() => localDayFor(new Date()))
+  const todaySession = computed(() => progressState.value.dailySessions.find((session) => session.localDay === todayLocalDay.value) ?? null)
+  const repairCards = computed(() => repairCardsFor(progressState.value, problems, todayLocalDay.value))
+  const dueRepairCards = computed(() => dueRepairCardsFor(repairCards.value, todayLocalDay.value))
+  const todayTasks = computed(() => (todaySession.value?.taskIds ?? [])
+    .map((taskId) => {
+      const repairId = repairIdForTask(taskId)
+      if (!repairId) return taskForId(taskId, learningTracks)
+      const card = repairCards.value.find((candidate) => candidate.id === repairId)
+      return card ? repairTaskFor(card) : null
+    })
+    .filter((task): task is DailyTask => task !== null)
+    .map((task) => ({ ...task, completed: todaySession.value?.completedTaskIds.includes(task.id) ?? false })))
+  const completedBeforeTodayIds = computed(() => {
+    const earliestRetrievalDay = new Date()
+    earliestRetrievalDay.setDate(earliestRetrievalDay.getDate() - 7)
+    const threshold = localDayFor(earliestRetrievalDay)
+    return new Set(progressState.value.completedProblems
+      .filter((completion) => localDayFor(new Date(completion.completedAt)) <= threshold)
+      .map(({ problemId }) => problemId))
+  })
+  const practiceConsistency = computed(() => consistencyFor(progressState.value.dailySessions, todayLocalDay.value))
 
-  watch([answers, results, streak, bestStreak], () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ answers: answers.value, results: results.value, streak: streak.value, bestStreak: bestStreak.value }))
-  }, { deep: true })
-  watch(quizCache, () => localStorage.setItem(QUIZ_CACHE_KEY, JSON.stringify(quizCache.value)), { deep: true })
-
+  watch(progressState, () => persistProgress(), { deep: true })
+  watch(quizCache, () => storage.setItem(QUIZ_CACHE_KEY, JSON.stringify(quizCache.value)), { deep: true })
   watch([
     currentProblemId,
     currentQuestionIndex,
@@ -124,7 +207,7 @@ export const useTrainerStore = defineStore('trainer', () => {
     activeQuestions,
   ], () => {
     if (currentProblemId.value === null || !currentQuestion.value) return
-    localStorage.setItem(ACTIVE_PROBLEM_SESSION_KEY, JSON.stringify({
+    storage.setItem(ACTIVE_PROBLEM_SESSION_KEY, JSON.stringify({
       version: 1,
       problemId: currentProblemId.value,
       questionId: currentQuestion.value.id,
@@ -139,6 +222,231 @@ export const useTrainerStore = defineStore('trainer', () => {
       completed: problemComplete.value,
     }))
   }, { deep: true })
+
+  function recordProductEvent(name: string, properties?: Record<string, string | number | boolean>) {
+    progressState.value.localEvents.push(createProductEvent(name, properties))
+    if (progressState.value.localEvents.length > 1000) progressState.value.localEvents.splice(0, progressState.value.localEvents.length - 1000)
+  }
+
+  function openRepairForAttempt(attempt: ProgressStateV2['attempts'][number], problem = currentProblem.value, question = currentQuestion.value) {
+    if (!problem || !question) return
+    const link = question.misconceptionLinks?.[attempt.selectedOptionIndex ?? -1]
+      ?? categoryRepairLink(problem, question.stage)
+    const existing = progressState.value.repairs.find((repair) => repair.misconceptionKey === link.key)
+    if (existing) {
+      existing.sourceAttemptId = attempt.id
+      existing.status = 'open'
+      existing.nextDueOn = attempt.localDay
+      existing.snoozedUntil = undefined
+      recordProductEvent('repair_reopened', { problemId: attempt.problemId })
+      return
+    }
+    progressState.value.repairs.push(createRepair({
+      misconceptionKey: link.key,
+      conceptKey: link.conceptKey,
+      sourceAttemptId: attempt.id,
+      status: 'open',
+      nextDueOn: attempt.localDay,
+    }))
+    recordProductEvent('repair_opened', { problemId: attempt.problemId, mode: link.repairMode })
+  }
+
+  function snoozeRepair(repairId: string, days = 7) {
+    const repair = progressState.value.repairs.find(({ id }) => id === repairId)
+    if (!repair || repair.status === 'validated') return false
+    const until = new Date()
+    until.setDate(until.getDate() + days)
+    repair.snoozedUntil = localDayFor(until)
+    repair.nextDueOn = repair.snoozedUntil
+    recordProductEvent('repair_snoozed', { days })
+    return true
+  }
+
+  function activeDailyTaskIdForProblem(problemId: number) {
+    return todayTasks.value.find((task) => task.problemId === problemId && !task.completed)?.id ?? null
+  }
+
+  function validateRepairFromAttempt(attempt: ProgressStateV2['attempts'][number], dailyTaskId: string | null, problem = currentProblem.value, question = currentQuestion.value) {
+    const repairId = dailyTaskId ? repairIdForTask(dailyTaskId) : null
+    if (!repairId || !dailyTaskId?.startsWith('repair-retrieval:') || !problem || !question || !attempt.correct || !attempt.firstAttempt) return
+    const repair = progressState.value.repairs.find(({ id }) => id === repairId)
+    const sourceAttempt = repair && progressState.value.attempts.find(({ id }) => id === repair.sourceAttemptId)
+    const currentLink = question.misconceptionLinks?.[attempt.selectedOptionIndex ?? -1]
+      ?? categoryRepairLink(problem, question.stage)
+    if (!repair || !sourceAttempt || repair.status !== 'revisited') return
+    if (attempt.localDay <= sourceAttempt.localDay || (attempt.problemId === sourceAttempt.problemId && attempt.questionId === sourceAttempt.questionId)) return
+    if (currentLink.key !== repair.misconceptionKey) return
+    repair.status = 'validated'
+    repair.validatedAt = attempt.occurredAt
+    repair.lastReviewedAt = attempt.occurredAt
+    recordProductEvent('repair_validated', { problemId: attempt.problemId })
+  }
+
+  function updateLearnerProfile(preferences: Partial<LearnerPreferences>) {
+    progressState.value.learner = {
+      ...progressState.value.learner,
+      ...preferences,
+      selectedTrackIds: preferences.selectedTrackIds ? [...new Set(preferences.selectedTrackIds)] : progressState.value.learner.selectedTrackIds,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  function beginOnboarding(preferences: LearnerPreferences) {
+    updateLearnerProfile(preferences)
+    progressState.value.learner = {
+      ...progressState.value.learner,
+      onboardingStatus: 'in-progress',
+      onboardingDecisionIds: [],
+      onboardingStartedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    recordProductEvent('onboarding_started', { dailyMinutes: preferences.dailyMinutes, trackCount: preferences.selectedTrackIds.length })
+  }
+
+  function recordOnboardingAnswer(problemId: number, question: QuizQuestion, selectedOptionIndex: number) {
+    const startedAt = progressState.value.learner.onboardingStartedAt
+    const savedAttempt = progressState.value.attempts.find((attempt) => attempt.source === 'onboarding'
+      && attempt.problemId === problemId
+      && attempt.questionId === question.id
+      && (!startedAt || attempt.occurredAt >= startedAt))
+    if (savedAttempt) return savedAttempt.correct
+    const correct = selectedOptionIndex === question.answer
+    const firstAttempt = !progressState.value.attempts.some((attempt) => attempt.problemId === problemId && attempt.questionId === question.id)
+    const attempt = createAttempt({
+      problemId,
+      questionId: question.id,
+      questionType: normalizedQuestionType(question),
+      questionFormat: question.format ?? 'multiple-choice',
+      stage: question.stage,
+      selectedOptionIndex,
+      correct,
+      firstAttempt,
+      hintLevelReached: 0,
+      contentVersion: COACHING_CONTENT_VERSION,
+      source: 'onboarding',
+      topicKeys: [...(problems.find((problem) => problem.id === problemId)?.topics ?? [])],
+    })
+    progressState.value.attempts.push(attempt)
+    recordProductEvent('onboarding_decision_answered', { problemId, correct })
+    return correct
+  }
+
+  function advanceOnboardingDecision(questionId: string) {
+    if (progressState.value.learner.onboardingDecisionIds.includes(questionId)) return
+    progressState.value.learner = {
+      ...progressState.value.learner,
+      onboardingDecisionIds: [...progressState.value.learner.onboardingDecisionIds, questionId],
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  function completeOnboarding() {
+    progressState.value.learner = {
+      ...progressState.value.learner,
+      onboardingStatus: 'complete',
+      updatedAt: new Date().toISOString(),
+    }
+    recordProductEvent('onboarding_completed')
+  }
+
+  function skipOnboarding() {
+    progressState.value.learner = {
+      ...progressState.value.learner,
+      onboardingStatus: 'complete',
+      onboardingDecisionIds: [],
+      onboardingStartedAt: undefined,
+      updatedAt: new Date().toISOString(),
+    }
+    recordProductEvent('onboarding_skipped')
+  }
+
+  function restartOnboarding() {
+    progressState.value.learner = {
+      ...progressState.value.learner,
+      onboardingStatus: 'not-started',
+      onboardingDecisionIds: [],
+      onboardingStartedAt: undefined,
+      updatedAt: new Date().toISOString(),
+    }
+    recordProductEvent('onboarding_restarted')
+  }
+
+  function sessionTasksForToday(excludedTaskIds: string[] = []) {
+    return planDailyTasks({
+      localDay: todayLocalDay.value,
+      dailyMinutes: progressState.value.learner.dailyMinutes,
+      selectedTrackIds: progressState.value.learner.selectedTrackIds,
+      tracks: learningTracks,
+      completedProblemIds: completedProblemIds.value,
+      completedBeforeTodayIds: completedBeforeTodayIds.value,
+      priorSessions: progressState.value.dailySessions,
+      dueRepairTasks: dueRepairCards.value.map(repairTaskFor),
+      excludedTaskIds,
+    })
+  }
+
+  function ensureTodaySession() {
+    if (todaySession.value) return todaySession.value
+    const tasks = sessionTasksForToday()
+    const session: DailySessionRecord = {
+      id: `daily-${todayLocalDay.value}`,
+      localDay: todayLocalDay.value,
+      plannedMinutes: progressState.value.learner.dailyMinutes,
+      taskIds: tasks.map(({ id }) => id),
+      completedTaskIds: [],
+      status: 'planned',
+      rebuildCount: 0,
+    }
+    progressState.value.dailySessions.push(session)
+    recordProductEvent('daily_session_created', { taskCount: tasks.length, plannedMinutes: session.plannedMinutes })
+    return session
+  }
+
+  function beginDailyTask(taskId: string) {
+    const session = ensureTodaySession()
+    if (!session.taskIds.includes(taskId) || session.status === 'complete') return false
+    if (session.status === 'planned') {
+      session.status = 'in-progress'
+      session.startedAt = new Date().toISOString()
+      recordProductEvent('daily_task_started', { taskId })
+    }
+    const repairId = repairIdForTask(taskId)
+    if (repairId) {
+      const repair = progressState.value.repairs.find(({ id }) => id === repairId)
+      if (repair && repair.status === 'open') repair.status = 'scheduled'
+    }
+    return true
+  }
+
+  function completeDailyTask(taskId: string) {
+    const session = ensureTodaySession()
+    if (!session.taskIds.includes(taskId) || session.completedTaskIds.includes(taskId)) return false
+    session.completedTaskIds.push(taskId)
+    if (session.status === 'planned') session.startedAt = new Date().toISOString()
+    session.status = session.completedTaskIds.length === session.taskIds.length ? 'complete' : 'in-progress'
+    if (session.status === 'complete') session.completedAt = new Date().toISOString()
+    const repairId = repairIdForTask(taskId)
+    if (repairId) {
+      const repair = progressState.value.repairs.find(({ id }) => id === repairId)
+      if (repair && repair.status !== 'validated') {
+        repair.status = 'revisited'
+        repair.lastReviewedAt = new Date().toISOString()
+      }
+    }
+    recordProductEvent(session.status === 'complete' ? 'daily_session_completed' : 'daily_task_completed', { taskId })
+    return true
+  }
+
+  function rebuildTodaySession() {
+    const session = ensureTodaySession()
+    if (session.status !== 'planned' || (session.rebuildCount ?? 0) >= 1) return false
+    const replacement = sessionTasksForToday(session.taskIds.slice(0, 1))
+    if (!replacement.length) return false
+    session.taskIds = replacement.map(({ id }) => id)
+    session.rebuildCount = (session.rebuildCount ?? 0) + 1
+    recordProductEvent('daily_session_rebuilt', { taskCount: replacement.length })
+    return true
+  }
 
   function resetProblemSessionState() {
     currentQuestionIndex.value = 0
@@ -156,9 +464,9 @@ export const useTrainerStore = defineStore('trainer', () => {
     const selected = availableProblems.value.find((problem) => problem.id === problemId)
     if (!selected) return false
     const questions = selected.questions.length ? selected.questions : (quizCache.value[selected.id] || [])
-    const rawSession = localStorage.getItem(ACTIVE_PROBLEM_SESSION_KEY)
+    const rawSession = storage.getItem(ACTIVE_PROBLEM_SESSION_KEY)
     const restored = parseActiveProblemSession(rawSession, selected.id, questions)
-    if (rawSession && !restored) localStorage.removeItem(ACTIVE_PROBLEM_SESSION_KEY)
+    if (rawSession && !restored) storage.removeItem(ACTIVE_PROBLEM_SESSION_KEY)
 
     currentProblemId.value = selected.id
     activeQuestions.value = questions
@@ -192,16 +500,18 @@ export const useTrainerStore = defineStore('trainer', () => {
   }
 
   function startProblem(problemId: number) {
-    return initializeProblem(problemId)
+    const started = initializeProblem(problemId)
+    if (started) recordProductEvent('problem_started', { problemId })
+    return started
   }
 
   function startRandomProblem() {
     const problemId = pickRandomProblemId()
-    return problemId === null ? false : initializeProblem(problemId)
+    return problemId === null ? false : startProblem(problemId)
   }
 
   function clearCurrentProblem() {
-    localStorage.removeItem(ACTIVE_PROBLEM_SESSION_KEY)
+    storage.removeItem(ACTIVE_PROBLEM_SESSION_KEY)
     currentProblemId.value = null
     activeQuestions.value = []
     resetProblemSessionState()
@@ -216,26 +526,37 @@ export const useTrainerStore = defineStore('trainer', () => {
     return true
   }
 
-  function recordAnswer(correct: boolean) {
+  function recordAnswer(correct: boolean, selectedOptionIndex?: number) {
     if (!currentProblem.value || !currentQuestion.value || submitted.value) return null
     const key = `${currentProblem.value.id}:${currentQuestion.value.id}`
     const firstAttempt = !attemptedCurrent.value.has(key)
     attemptedCurrent.value.add(key)
-    answers.value.push({
+    const dailyTaskId = activeDailyTaskIdForProblem(currentProblem.value.id)
+    const attempt = createAttempt({
       problemId: currentProblem.value.id,
       questionId: currentQuestion.value.id,
-      questionType: currentQuestion.value.type,
+      questionType: normalizedQuestionType(currentQuestion.value),
       questionFormat: currentQuestion.value.format ?? 'multiple-choice',
+      stage: currentQuestion.value.stage,
+      selectedOptionIndex,
       correct,
-      answeredAt: new Date().toISOString(),
+      firstAttempt,
+      hintLevelReached: Math.min(revealedHintCount.value, 3) as 0 | 1 | 2 | 3,
+      contentVersion: COACHING_CONTENT_VERSION,
+      source: dailyTaskId ? 'daily-session' : 'practice',
+      topicKeys: [...currentProblem.value.topics],
     })
+    progressState.value.attempts.push(attempt)
+    if (!correct) openRepairForAttempt(attempt)
+    else validateRepairFromAttempt(attempt, dailyTaskId)
     if (correct) {
       if (firstAttempt) firstTryCorrect.value++
-      streak.value++
-      bestStreak.value = Math.max(bestStreak.value, streak.value)
+      progressState.value.legacyAnswerStreak += 1
+      progressState.value.legacyBestAnswerStreak = Math.max(progressState.value.legacyBestAnswerStreak, progressState.value.legacyAnswerStreak)
     } else {
-      streak.value = 0
+      progressState.value.legacyAnswerStreak = 0
     }
+    recordProductEvent('answer_submitted', { problemId: currentProblem.value.id, correct, firstAttempt })
     answerCorrect.value = correct
     submitted.value = true
     return correct
@@ -243,8 +564,7 @@ export const useTrainerStore = defineStore('trainer', () => {
 
   function submitAnswer() {
     if (selectedAnswer.value === null || !currentProblem.value || !currentQuestion.value) return null
-    const correct = selectedAnswer.value === currentQuestion.value.answer
-    return recordAnswer(correct)
+    return recordAnswer(selectedAnswer.value === currentQuestion.value.answer, selectedAnswer.value)
   }
 
   function submitEvaluatedAnswer(correct: boolean) {
@@ -281,25 +601,55 @@ export const useTrainerStore = defineStore('trainer', () => {
       return true
     }
     if (!problemComplete.value) {
-      results.value.push({ problemId: currentProblem.value.id, completedAt: new Date().toISOString(), correct: firstTryCorrect.value, total: activeQuestions.value.length })
+      progressState.value.completedProblems.push(createCompletion({
+        problemId: currentProblem.value.id,
+        correct: firstTryCorrect.value,
+        total: activeQuestions.value.length,
+        contentVersion: COACHING_CONTENT_VERSION,
+      }))
+      recordProductEvent('problem_completed', { problemId: currentProblem.value.id, firstTryCorrect: firstTryCorrect.value, total: activeQuestions.value.length })
       problemComplete.value = true
     }
     return false
   }
 
+  function exportProgressData() {
+    return serializeProgress(progressState.value)
+  }
+
+  function exportRecoveryData() {
+    return progressRecovery.value?.raw ?? null
+  }
+
+  function importProgressData(raw: string) {
+    const imported = importProgress(raw, progressState.value, progressContentIndex)
+    if (!imported.state) {
+      progressRecovery.value = { storageKey: PROGRESS_V2_STORAGE_KEY, raw, reason: 'invalid-import' }
+      return { ok: false, error: imported.error }
+    }
+    progressState.value = imported.state
+    progressRecovery.value = null
+    recordProductEvent('progress_imported')
+    return { ok: true, error: null }
+  }
+
   function resetProgress() {
-    answers.value = []
-    results.value = []
-    streak.value = 0
-    bestStreak.value = 0
-    localStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem(ACTIVE_PROBLEM_SESSION_KEY)
+    progressState.value = emptyProgressState()
+    progressRecovery.value = null
+    storage.removeItem(PROGRESS_V1_STORAGE_KEY)
+    storage.removeItem(PROGRESS_V2_STORAGE_KEY)
+    storage.removeItem(ACTIVE_PROBLEM_SESSION_KEY)
   }
 
   return {
-    answers, results, streak, bestStreak, currentProblemId, currentQuestionIndex, selectedAnswer, submitted, answerCorrect,
+    answers, results, streak, bestStreak, progressState, progressRecovery, progressMigrationStatus, progressStorageError,
+    currentProblemId, currentQuestionIndex, selectedAnswer, submitted, answerCorrect,
     firstTryCorrect, revealedHintCount, interactionState, problemComplete, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
-    totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, topicMastery, aiCoachEnabled, catalogSize: problems.length, startProblem,
-    pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, tryAgain, setInteractionState, revealNextHint, nextQuestion, resetProgress,
+    totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, topicMastery, aiCoachEnabled, catalogSize: problems.length,
+    todaySession, todayTasks, practiceConsistency, repairCards, dueRepairCards,
+    startProblem, pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, tryAgain,
+    setInteractionState, revealNextHint, nextQuestion, resetProgress, exportProgressData, exportRecoveryData, importProgressData, recordProductEvent,
+    updateLearnerProfile, beginOnboarding, recordOnboardingAnswer, advanceOnboardingDecision, completeOnboarding, skipOnboarding, restartOnboarding,
+    ensureTodaySession, beginDailyTask, completeDailyTask, rebuildTodaySession, snoozeRepair,
   }
 })
