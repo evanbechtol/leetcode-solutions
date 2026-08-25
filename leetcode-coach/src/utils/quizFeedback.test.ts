@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import quizViewSource from '../views/QuizView.vue?raw'
 import type { QuizQuestion } from '../types'
 import { incorrectFeedbackFor, shouldRevealCorrectChoice } from './quizFeedback'
 
@@ -16,5 +17,10 @@ describe('quiz feedback disclosure', () => {
   it('does not reveal the correct choice after a wrong submission', () => {
     expect(shouldRevealCorrectChoice(true, false)).toBe(false)
     expect(shouldRevealCorrectChoice(true, true)).toBe(true)
+  })
+
+  it('uses a bounded single-column completion layout on narrow screens', () => {
+    expect(quizViewSource).toContain("'quiz-layout-complete': sessionComplete")
+    expect(quizViewSource).toContain('class="completion-actions mt-7"')
   })
 })

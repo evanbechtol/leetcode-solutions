@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { QuestionInteractionResult, QuestionInteractionState, QuizQuestion, StateItemClassification } from '../../types'
-import { evaluateStateSufficiency } from '../../utils/questionEvaluation'
+import type { QuestionInteractionResult, QuestionInteractionState, QuizQuestion, StateItemClassification, StateSufficiencyConfig } from '../../types'
+import { evaluateStateSufficiency, stateClassificationReview } from '../../utils/questionEvaluation'
 
 const props = defineProps<{ question: QuizQuestion; submitted: boolean; initialState?: QuestionInteractionState | null }>()
 const emit = defineEmits<{ (event: 'response-change', response: QuestionInteractionResult): void }>()
@@ -19,6 +19,14 @@ const choices: Array<{ value: StateItemClassification; label: string }> = [
 function classify(id: string, event: Event) {
   if (props.submitted) return
   classifications.value = { ...classifications.value, [id]: (event.target as HTMLSelectElement).value as StateItemClassification }
+}
+
+function reviewState(item: StateSufficiencyConfig['items'][number]) {
+  return stateClassificationReview(item, classifications.value[item.id], props.submitted)
+}
+
+function reviewLabel(item: StateSufficiencyConfig['items'][number]) {
+  return reviewState(item) === 'correct-selected' ? 'Correct' : reviewState(item) === 'incorrect' ? 'Incorrect' : ''
 }
 
 const feedback = computed(() => {
@@ -41,12 +49,22 @@ watch(classifications, () => emit('response-change', {
     <div class="contract-source"><span>Checkpoint</span><strong>{{ config.checkpoint.input }}</strong><p>{{ config.checkpoint.stateDescription }}</p></div>
     <div v-if="config.maxItems" class="state-budget">State budget: keep at most {{ config.maxItems }} essential items.</div>
     <div class="classification-list">
-      <label v-for="item in config.items" :key="item.id" class="classification-row">
+      <label v-for="item in config.items" :key="item.id" :class="['classification-row', reviewState(item)]">
         <span>{{ item.label }}</span>
-        <select :value="classifications[item.id] ?? ''" :disabled="submitted" :aria-label="`Classify ${item.label}`" @change="classify(item.id, $event)">
-          <option value="" disabled>Choose what happens to this information</option>
-          <option v-for="choice in choices" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
-        </select>
+        <span class="classification-control">
+          <select
+            :value="classifications[item.id] ?? ''"
+            :disabled="submitted"
+            :aria-label="`Classify ${item.label}`"
+            :aria-invalid="reviewState(item) === 'incorrect' || undefined"
+            :data-review-state="reviewState(item)"
+            @change="classify(item.id, $event)"
+          >
+            <option value="" disabled>Choose what happens to this information</option>
+            <option v-for="choice in choices" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+          </select>
+          <span v-if="reviewLabel(item)" class="choice-review-label">{{ reviewLabel(item) }}</span>
+        </span>
       </label>
     </div>
   </div>

@@ -316,7 +316,7 @@ async function copySolution() {
       </section>
     </div>
 
-    <div v-else class="quiz-layout app-shell px-5 px-md-8 py-7 py-md-10">
+    <div v-else :class="['quiz-layout', 'app-shell', 'px-5', 'px-md-8', 'py-7', 'py-md-10', { 'quiz-layout-complete': sessionComplete }]">
       <aside class="problem-panel">
         <div class="d-flex align-center justify-space-between mb-6">
           <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" :to="{ name: 'problems' }">All problems</v-btn>
@@ -436,7 +436,7 @@ async function copySolution() {
               </div>
               <pre><code class="hljs" :class="`language-${highlightLanguage}`" v-html="highlightedSolution" /></pre>
             </div>
-            <div class="d-flex flex-wrap justify-center ga-3 mt-7">
+            <div class="completion-actions mt-7">
               <v-btn v-if="dailyTaskId" color="primary" size="large" to="/today" prepend-icon="mdi-calendar-check-outline">Back to today</v-btn>
               <v-btn variant="outlined" size="large" to="/profile" prepend-icon="mdi-chart-donut">View progress</v-btn>
               <v-btn v-if="!dailyTaskId" color="primary" size="large" append-icon="mdi-shuffle-variant" @click="start">Another problem</v-btn>

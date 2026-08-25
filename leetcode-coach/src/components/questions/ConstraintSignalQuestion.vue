@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { QuestionInteractionResult, QuestionInteractionState, QuizQuestion } from '../../types'
-import { evaluateConstraintSignals } from '../../utils/questionEvaluation'
+import type { ConstraintSignalConfig, QuestionInteractionResult, QuestionInteractionState, QuizQuestion } from '../../types'
+import { constraintSignalChoiceReview, evaluateConstraintSignals } from '../../utils/questionEvaluation'
 
 const props = defineProps<{ question: QuizQuestion; submitted: boolean; initialState?: QuestionInteractionState | null }>()
 const emit = defineEmits<{ (event: 'response-change', response: QuestionInteractionResult): void }>()
@@ -14,6 +14,17 @@ const evaluation = computed(() => evaluateConstraintSignals(config.value, mappin
 function mapSignal(signalId: string, consequenceId: string | null) {
   if (props.submitted) return
   mappings.value = { ...mappings.value, [signalId]: consequenceId }
+}
+
+function reviewState(signal: ConstraintSignalConfig['signals'][number], consequenceId: string | null) {
+  return constraintSignalChoiceReview(signal, mappings.value[signal.id], consequenceId, props.submitted)
+}
+
+function reviewLabel(signal: ConstraintSignalConfig['signals'][number], consequenceId: string | null) {
+  const state = reviewState(signal, consequenceId)
+  if (state === 'incorrect') return 'Incorrect'
+  if (state === 'correct-selected') return 'Correct'
+  return ''
 }
 
 const feedback = computed(() => {
@@ -46,15 +57,25 @@ watch(mappings, () => emit('response-change', {
             :key="consequence.id"
             type="button"
             :aria-pressed="mappings[signal.id] === consequence.id"
-            :class="{ selected: mappings[signal.id] === consequence.id }"
+            :aria-invalid="reviewState(signal, consequence.id) === 'incorrect' || undefined"
+            :data-review-state="reviewState(signal, consequence.id)"
+            :class="[mappings[signal.id] === consequence.id && 'selected', reviewState(signal, consequence.id)]"
             @click="mapSignal(signal.id, consequence.id)"
-          >{{ consequence.text }}</button>
+          >
+            <span>{{ consequence.text }}</span>
+            <span v-if="reviewLabel(signal, consequence.id)" class="choice-review-label">{{ reviewLabel(signal, consequence.id) }}</span>
+          </button>
           <button
             type="button"
             :aria-pressed="Object.prototype.hasOwnProperty.call(mappings, signal.id) && mappings[signal.id] === null"
-            :class="{ selected: Object.prototype.hasOwnProperty.call(mappings, signal.id) && mappings[signal.id] === null }"
+            :aria-invalid="reviewState(signal, null) === 'incorrect' || undefined"
+            :data-review-state="reviewState(signal, null)"
+            :class="[Object.prototype.hasOwnProperty.call(mappings, signal.id) && mappings[signal.id] === null && 'selected', reviewState(signal, null)]"
             @click="mapSignal(signal.id, null)"
-          >No direct algorithmic consequence</button>
+          >
+            <span>No direct algorithmic consequence</span>
+            <span v-if="reviewLabel(signal, null)" class="choice-review-label">{{ reviewLabel(signal, null) }}</span>
+          </button>
         </div>
       </fieldset>
     </div>

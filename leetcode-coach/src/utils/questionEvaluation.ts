@@ -38,6 +38,33 @@ export const evaluateCodeConstructionChoice = (step: CodeConstructionStep, selec
 const owns = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key)
 const sameSet = (left: string[], right: string[]) => left.length === right.length && left.every((id) => right.includes(id))
 
+export type SelectedAnswerReview = 'neutral' | 'incorrect' | 'correct-selected'
+
+export const constraintSignalChoiceReview = (
+  signal: ConstraintSignalConfig['signals'][number],
+  selectedConsequenceId: string | null | undefined,
+  consequenceId: string | null,
+  submitted: boolean,
+): SelectedAnswerReview => {
+  if (!submitted) return 'neutral'
+  const selected = selectedConsequenceId === consequenceId
+  const correct = consequenceId === null
+    ? signal.consequenceIds.length === 0
+    : signal.consequenceIds.includes(consequenceId)
+  if (selected && correct) return 'correct-selected'
+  if (selected) return 'incorrect'
+  return 'neutral'
+}
+
+export const stateClassificationReview = (
+  item: StateSufficiencyConfig['items'][number],
+  selectedClassification: StateItemClassification | undefined,
+  submitted: boolean,
+): SelectedAnswerReview => {
+  if (!submitted || selectedClassification === undefined) return 'neutral'
+  return selectedClassification === item.classification ? 'correct-selected' : 'incorrect'
+}
+
 export const evaluateConstraintSignals = (config: ConstraintSignalConfig, mappings: Record<string, string | null>) => {
   const complete = config.signals.every(({ id }) => owns(mappings, id))
   const wrongSignalIds = config.signals.filter((signal) => {

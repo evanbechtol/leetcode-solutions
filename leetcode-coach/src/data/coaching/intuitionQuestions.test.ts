@@ -5,16 +5,18 @@ import stateSufficiencyComponent from '../../components/questions/StateSufficien
 import nearTwinComponent from '../../components/questions/NearTwinQuestion.vue?raw'
 import constraintMutationComponent from '../../components/questions/ConstraintMutationQuestion.vue?raw'
 import structuralAnalogyComponent from '../../components/questions/StructuralAnalogyQuestion.vue?raw'
-import type { QuestionFormat, QuestionInteractionState, QuizQuestion, ReasoningSkillKey } from '../../types'
+import type { QuestionFormat, QuestionInteractionState, QuizQuestion, ReasoningSkillKey, StateItemClassification } from '../../types'
 import { QUESTION_FORMATS } from '../../types'
 import { ACTIVE_PROBLEM_SESSION_VERSION, parseActiveProblemSession } from '../../utils/activeProblemSession'
 import { instructionalLevelFor, selectAdaptiveQuestionPath } from '../../utils/adaptiveQuestions'
 import {
   evaluateConstraintMutation,
   evaluateConstraintSignals,
+  constraintSignalChoiceReview,
   evaluateNearTwin,
   evaluateOperationContract,
   evaluateStateSufficiency,
+  stateClassificationReview,
   evaluateStructuralAnalogy,
 } from '../../utils/questionEvaluation'
 import type { AttemptRecord } from '../../stores/progress'
@@ -50,6 +52,31 @@ describe('Wave 1 intuition questions', () => {
     expect(evaluateConstraintSignals(question.config, correct)).toMatchObject({ complete: true, correct: true })
     const wrong = { ...correct, [question.config.signals[0].id]: null }
     expect(evaluateConstraintSignals(question.config, wrong).diagnosticKeys).toContain(`constraint-signal:${question.config.signals[0].id}`)
+  })
+
+  it('classifies submitted signal choices for visible answer review', () => {
+    const question = questionFor('constraint-signals')
+    const decisive = question.config.signals.find((signal) => signal.consequenceIds.length)!
+    const correctId = decisive.consequenceIds[0]
+    const wrongId = question.config.consequences.find(({ id }) => !decisive.consequenceIds.includes(id))!.id
+    expect(constraintSignalChoiceReview(decisive, wrongId, wrongId, true)).toBe('incorrect')
+    expect(constraintSignalChoiceReview(decisive, wrongId, correctId, true)).toBe('neutral')
+    expect(constraintSignalChoiceReview(decisive, correctId, correctId, true)).toBe('correct-selected')
+    expect(constraintSignalChoiceReview(decisive, wrongId, wrongId, false)).toBe('neutral')
+    expect(constraintSignalComponent).toContain('choice-review-label')
+    expect(constraintSignalComponent).toContain('aria-invalid')
+  })
+
+  it('marks selected invariant classifications without revealing replacements', () => {
+    const question = questionFor('state-sufficiency')
+    const item = question.config.items[0]
+    const wrongClassification = (['required', 'optional-redundant', 'discardable'] as StateItemClassification[])
+      .find((classification) => classification !== item.classification)!
+    expect(stateClassificationReview(item, item.classification, true)).toBe('correct-selected')
+    expect(stateClassificationReview(item, wrongClassification, true)).toBe('incorrect')
+    expect(stateClassificationReview(item, wrongClassification, false)).toBe('neutral')
+    expect(stateSufficiencyComponent).toContain('choice-review-label')
+    expect(stateSufficiencyComponent).toContain('aria-invalid')
   })
 
   it('separates operation inference from structure recognition', () => {
