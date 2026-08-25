@@ -5,6 +5,7 @@ import { codeLanguages, useCodeLanguagePreference } from '../composables/useCode
 import { problems } from '../data/problems'
 import { learningTracks } from '../data/tracks'
 import { useTrainerStore } from '../stores/trainer'
+import type { CalibrationInsightKind } from '../utils/confidenceCalibration'
 
 const store = useTrainerStore()
 const router = useRouter()
@@ -39,6 +40,14 @@ const visibleRepairCards = computed(() => store.repairCards.filter((card) =>
   && (repairTrack.value === 'all' || card.lessonSlug === repairTrack.value)
   && (repairFormat.value === 'all' || card.questionFormat === repairFormat.value),
 ))
+const calibrationPresentation: Record<CalibrationInsightKind, { icon: string; tone: string }> = {
+  'insufficient-evidence': { icon: 'mdi-chart-timeline-variant-shimmer', tone: 'neutral' },
+  'aligned-confidence': { icon: 'mdi-check-decagram-outline', tone: 'aligned' },
+  'correct-but-unsure': { icon: 'mdi-brain', tone: 'retrieval' },
+  'high-confidence-errors': { icon: 'mdi-wrench-check-outline', tone: 'repair' },
+  'uncertain-errors': { icon: 'mdi-book-open-page-variant-outline', tone: 'review' },
+  'mixed-signal': { icon: 'mdi-chart-scatter-plot', tone: 'neutral' },
+}
 
 function download(name: string, contents: string, type = 'application/json') {
   const url = URL.createObjectURL(new Blob([contents], { type }))
@@ -156,6 +165,28 @@ async function openRepair(lessonSlug: string, repairId: string) {
           <v-icon :icon="['algorithm-builder', 'code-construction'].includes(stat.format) ? 'mdi-code-braces' : stat.format === 'iteration-visualization' ? 'mdi-motion-play-outline' : 'mdi-format-list-checks'" />
           <div><span>{{ stat.label }}</span><strong>{{ stat.total ? `${stat.accuracy}%` : '—' }}</strong><small>{{ stat.correct }} correct · {{ stat.total }} attempts</small></div>
         </article>
+      </div>
+    </v-card>
+
+    <v-card class="analytics-card format-analytics pa-6 pa-md-7 mt-4">
+      <div class="section-heading">
+        <div><span class="eyebrow">Confidence calibration</span><h2>What confidence can tell you</h2><p class="section-copy">These private signals use first-try decisions only. They guide review and never change correctness or mastery.</p></div>
+        <v-chip variant="outlined" size="small" prepend-icon="mdi-lock-outline">Only on this device</v-chip>
+      </div>
+      <div v-if="store.confidenceInsights.length" class="calibration-grid mt-6">
+        <article v-for="insight in store.confidenceInsights" :key="insight.skill" class="calibration-card" :class="`calibration-${calibrationPresentation[insight.kind].tone}`">
+          <v-icon :icon="calibrationPresentation[insight.kind].icon" />
+          <div>
+            <span>{{ insight.label }} · {{ insight.evidenceCount }} {{ insight.evidenceCount === 1 ? 'check' : 'checks' }}</span>
+            <h3>{{ insight.title }}</h3>
+            <p>{{ insight.summary }}</p>
+            <small>{{ insight.nextAction }}</small>
+          </div>
+        </article>
+      </div>
+      <div v-else class="calibration-empty mt-6">
+        <v-icon icon="mdi-gauge-empty" size="32" />
+        <div><strong>No confidence signal yet.</strong><p>Skip every prompt if you prefer. Pathfinder will keep ordinary practice unchanged.</p></div>
       </div>
     </v-card>
 

@@ -205,6 +205,20 @@ describe('active problem persistence', () => {
     })
   })
 
+  it('keeps ordinary grading unchanged when confidence is skipped', () => {
+    const store = useTrainerStore()
+    store.startProblem(1)
+    const question = moveToMultipleChoice(store)
+    store.selectedAnswer = question.config.answer
+    const originalStreak = store.streak
+
+    expect(store.confidence).toBeNull()
+    expect(store.submitAnswer()).toBe(true)
+    expect(store.answerCorrect).toBe(true)
+    expect(store.streak).toBe(originalStreak + 1)
+    expect(store.progressState.attempts.at(-1)?.confidence).toBeUndefined()
+  })
+
   it('exports and imports V2 progress without duplicating stable attempt IDs', () => {
     const store = useTrainerStore()
     store.startProblem(1)

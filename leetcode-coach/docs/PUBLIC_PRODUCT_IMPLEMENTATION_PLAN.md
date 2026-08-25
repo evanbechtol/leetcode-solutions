@@ -133,6 +133,8 @@ Each incorrect option on deep representative content receives a `MisconceptionLi
 
 ## Milestone 0 — Public-MVP foundation and safety rails
 
+**Status:** Complete (verified August 25, 2026).
+
 **Priority:** P0. **Why first:** All later retention features depend on reliable local learning history and a safe migration path.
 
 ### Learner outcome
@@ -156,6 +158,8 @@ Existing learners retain their progress, while new learners have a stable local 
 - Existing quiz refresh-resume, reset, profile statistics, full test suite, and production build still pass.
 
 ## Milestone 1 — Guided first session and learner profile
+
+**Status:** Complete (verified August 25, 2026).
 
 **Priority:** P0. **Depends on:** Milestone 0. **Strategy tested:** A beginner can quickly find a safe, relevant starting point instead of facing a catalog of 136 problems.
 
@@ -187,6 +191,8 @@ The first visit presents “Find your starting point,” not a graded placement 
 - The recommendation always resolves to an existing lesson or a problem with a valid deterministic path.
 
 ## Milestone 2 — Daily Mastery Session and compassionate consistency
+
+**Status:** Complete (verified August 25, 2026).
 
 **Priority:** P0. **Depends on:** Milestones 0–1. **Strategy tested:** A small, concrete next action increases return behavior more reliably than a random-problem landing page.
 
@@ -238,6 +244,8 @@ Replace answer-by-answer streak resets with a separate **practice consistency** 
 
 ## Milestone 3 — Personal Error Atlas and verified repair loops
 
+**Status:** Complete (verified August 25, 2026).
+
 **Priority:** P0. **Depends on:** Milestones 0–2. **Strategy tested:** Specific, non-judgmental recovery from a mistake is more valuable than a generic wrong-answer explanation.
 
 ### Learner experience
@@ -284,6 +292,8 @@ Counterexample construction, edge-case prediction, and solution comparison becom
 
 ## Milestone 4 — Confidence calibration and private proficiency signals
 
+**Status:** Complete (verified August 25, 2026). Confidence is requested only at three deterministic high-value checkpoints, calibration insights require five first-attempt confidence records per reasoning skill, and equal-due repairs prioritize high-confidence errors.
+
 **Priority:** P1. **Depends on:** Milestone 3. **Strategy tested:** Learners benefit from knowing whether errors come from uncertainty, overconfidence, or missing retrieval practice.
 
 ### Learner experience
@@ -312,6 +322,8 @@ Avoid personality claims, numeric learner rankings, or mental-health language.
 - Test coverage includes correct-high, correct-low, incorrect-high, incorrect-low, skipped, and insufficient-evidence cases.
 
 ## Milestone 5 — Learning map, tracks, and milestone sharing
+
+**Status:** Planned.
 
 **Priority:** P1. **Depends on:** Milestones 1–4. **Strategy tested:** Beginners return when progress is visible as connected capabilities rather than a flat count of problems completed.
 
@@ -346,6 +358,8 @@ Create an optional local image card for milestones such as a stable concept, com
 - Accessibility includes a semantic list alternative to any visual graph.
 
 ## Milestone 6 — Public polish, trust, and feedback loop
+
+**Status:** Planned.
 
 **Priority:** P1. **Depends on:** Milestones 0–5. **Strategy tested:** Public users will trust and recommend Pathfinder when its instructional quality, privacy posture, and beta feedback path are explicit.
 

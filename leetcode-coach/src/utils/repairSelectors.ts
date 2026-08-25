@@ -1,4 +1,4 @@
-import type { Problem } from '../types'
+import type { ConfidenceLevel, Problem } from '../types'
 import { categoryRepairLink } from '../data/repairMetadata'
 import { COACHING_CONTENT_VERSION } from '../data/coaching/contentVersion'
 import type { AttemptRecord, ProgressStateV2, RepairRecord } from '../stores/progress'
@@ -27,11 +27,22 @@ export interface RepairCard {
   contentUpdated: boolean
   repeatCount: number
   lastOccurredAt: string
+  sourceConfidence?: ConfidenceLevel
 }
 
 const sourceAttemptFor = (repair: RepairRecord, attempts: AttemptRecord[]) => attempts.find(({ id }) => id === repair.sourceAttemptId)
 
-export const repairCardsFor = (state: ProgressStateV2, problems: Problem[], today: string): RepairCard[] => state.repairs.flatMap((repair) => {
+export const sortRepairCardsForPlanning = (cards: RepairCard[]) => [...cards].sort((left, right) => {
+  const due = left.nextDueOn.localeCompare(right.nextDueOn)
+  if (due) return due
+  const confidencePriority = Number(right.sourceConfidence === 'high') - Number(left.sourceConfidence === 'high')
+  if (confidencePriority) return confidencePriority
+  const repeats = right.repeatCount - left.repeatCount
+  if (repeats) return repeats
+  return right.lastOccurredAt.localeCompare(left.lastOccurredAt)
+})
+
+export const repairCardsFor = (state: ProgressStateV2, problems: Problem[], today: string): RepairCard[] => sortRepairCardsForPlanning(state.repairs.flatMap((repair) => {
   const attempt = sourceAttemptFor(repair, state.attempts)
   const problem = attempt && problems.find(({ id }) => id === attempt.problemId)
   const question = problem && [...problem.questions, ...compilePilotTransferQuestions(problem)].find(({ id }) => id === attempt?.questionId)
@@ -64,14 +75,9 @@ export const repairCardsFor = (state: ProgressStateV2, problems: Problem[], toda
     contentUpdated,
     repeatCount,
     lastOccurredAt: attempt.occurredAt,
+    sourceConfidence: attempt.confidence,
   }]
-}).sort((left, right) => {
-  const due = left.nextDueOn.localeCompare(right.nextDueOn)
-  if (due) return due
-  const repeats = right.repeatCount - left.repeatCount
-  if (repeats) return repeats
-  return right.lastOccurredAt.localeCompare(left.lastOccurredAt)
-})
+}))
 
 export const dueRepairCardsFor = (cards: RepairCard[], today: string) => cards.filter((card) => card.status !== 'validated'
   && (!card.snoozedUntil || card.snoozedUntil <= today)

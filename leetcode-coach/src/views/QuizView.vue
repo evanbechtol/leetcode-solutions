@@ -15,6 +15,7 @@ import { questionComponentFor } from '../components/questions/registry'
 import { incorrectFeedbackFor } from '../utils/quizFeedback'
 import { parseProblemRouteId, problemRoutePath } from '../utils/problemRoutes'
 import { questionOptions } from '../utils/questionConfig'
+import { confidencePromptQuestionIdsFor } from '../utils/confidenceCalibration'
 import type { QuestionInteractionResult, QuestionInteractionState } from '../types'
 
 hljs.registerLanguage('typescript', typescript)
@@ -37,8 +38,10 @@ const quizError = ref('')
 const aiCoachEnabled = import.meta.env.MODE === 'ai' || import.meta.env.VITE_AI_COACH_ENABLED === 'true'
 const dailyTaskId = computed(() => typeof route.query.dailyTask === 'string' ? route.query.dailyTask : null)
 const questionPanel = ref<HTMLElement | null>(null)
+const confidenceHeading = ref<HTMLElement | null>(null)
 const interactionKey = ref(0)
 const interactionResponse = ref<QuestionInteractionResult | null>(null)
+const awaitingConfidence = ref(false)
 const { preferredLanguage, setPreferredLanguage } = useCodeLanguagePreference()
 
 const progress = computed(() => store.currentProblem
@@ -72,7 +75,10 @@ const initialInteractionState = computed<QuestionInteractionState | null>(() => 
   ?? (currentFormat.value === 'multiple-choice' ? { format: 'multiple-choice', selectedAnswer: store.selectedAnswer } : null))
 const revealedHints = computed(() => store.currentQuestion?.hintLevels?.slice(0, store.revealedHintCount) ?? [])
 const hasMoreHints = computed(() => store.revealedHintCount < (store.currentQuestion?.hintLevels?.length ?? 0))
-const showConfidence = computed(() => currentFormat.value !== 'code-construction' && currentFormat.value !== 'algorithm-builder')
+const confidencePromptQuestionIds = computed(() => confidencePromptQuestionIdsFor(store.activeQuestions))
+const shouldRequestConfidence = computed(() => Boolean(store.currentQuestion
+  && confidencePromptQuestionIds.value.has(store.currentQuestion.id)
+  && !store.attemptedCurrent.has(store.currentQuestion.id)))
 const confidenceOptions = [
   { value: 'low' as const, label: 'Not sure' },
   { value: 'medium' as const, label: 'Somewhat sure' },
@@ -134,6 +140,7 @@ function scrollQuestionToTop() {
 }
 
 function resetInteraction() {
+  awaitingConfidence.value = false
   interactionResponse.value = null
   interactionKey.value++
 }
@@ -263,6 +270,29 @@ async function checkAnswer() {
   }
 }
 
+async function beginAnswerSubmission() {
+  if (!interactionResponse.value) return
+  if (!shouldRequestConfidence.value) {
+    await checkAnswer()
+    return
+  }
+  store.confidence = null
+  awaitingConfidence.value = true
+  await nextTick()
+  confidenceHeading.value?.focus()
+}
+
+async function submitConfidence() {
+  awaitingConfidence.value = false
+  await checkAnswer()
+}
+
+async function skipConfidence() {
+  store.confidence = null
+  awaitingConfidence.value = false
+  await checkAnswer()
+}
+
 function retryQuestion() {
   aiHint.value = ''
   store.tryAgain()
@@ -369,13 +399,30 @@ async function copySolution() {
             <h2>{{ store.currentQuestion?.prompt }}</h2>
             <component
               :is="currentQuestionComponent"
-              v-if="store.currentQuestion"
+              v-if="store.currentQuestion && !awaitingConfidence"
               :key="interactionKey"
               :question="store.currentQuestion"
               :submitted="store.submitted"
               :initial-state="initialInteractionState"
               @response-change="updateInteraction"
             />
+
+            <section v-if="awaitingConfidence" class="confidence-check confidence-check-committed mt-6" aria-labelledby="confidence-heading">
+              <div>
+                <span class="confidence-commit">Answer locked in</span>
+                <h3 id="confidence-heading" ref="confidenceHeading" tabindex="-1">How confident did that feel?</h3>
+                <p>This private signal helps choose later practice. It never changes correctness, mastery, or streaks.</p>
+              </div>
+              <div class="confidence-controls">
+                <div role="radiogroup" aria-label="Answer confidence">
+                  <button v-for="option in confidenceOptions" :key="option.value" type="button" role="radio" :aria-checked="store.confidence === option.value" :class="{ selected: store.confidence === option.value }" @click="store.confidence = option.value">{{ option.label }}</button>
+                </div>
+                <div class="confidence-actions">
+                  <v-btn variant="text" size="small" @click="skipConfidence">Skip</v-btn>
+                  <v-btn color="primary" size="small" :disabled="!store.confidence" @click="submitConfidence">See feedback</v-btn>
+                </div>
+              </div>
+            </section>
 
             <v-expand-transition>
               <div v-if="store.submitted" class="feedback mt-6" :class="isCorrect ? 'feedback-correct' : 'feedback-wrong'">
@@ -400,17 +447,10 @@ async function copySolution() {
               </div>
             </v-expand-transition>
 
-            <div v-if="!store.submitted && canSubmit && showConfidence" class="confidence-check mt-6">
-              <div><strong>How sure are you?</strong><span>This helps choose later practice. It does not change your score.</span></div>
-              <div role="radiogroup" aria-label="Answer confidence">
-                <button v-for="option in confidenceOptions" :key="option.value" type="button" role="radio" :aria-checked="store.confidence === option.value" :class="{ selected: store.confidence === option.value }" @click="store.confidence = option.value">{{ option.label }}</button>
-              </div>
-            </div>
-
-            <div class="question-actions mt-7">
+            <div v-if="!awaitingConfidence" class="question-actions mt-7">
               <span v-if="!store.submitted" class="keyboard-note">{{ actionInstruction }}</span>
               <v-spacer />
-              <v-btn v-if="!store.submitted" color="primary" size="large" :disabled="!canSubmit" @click="checkAnswer">{{ checkLabel }}</v-btn>
+              <v-btn v-if="!store.submitted" color="primary" size="large" :disabled="!canSubmit" @click="beginAnswerSubmission">{{ checkLabel }}</v-btn>
               <v-btn v-else-if="!isCorrect" color="primary" size="large" prepend-icon="mdi-reload" :disabled="hintLoading" @click="retryQuestion">Try again</v-btn>
               <v-btn v-else color="primary" size="large" append-icon="mdi-arrow-right" @click="continueQuiz">
                 {{ store.currentQuestionIndex === store.questionCount - 1 ? 'See solution' : 'Next decision' }}

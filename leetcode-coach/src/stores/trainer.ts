@@ -13,6 +13,7 @@ import { consistencyFor, planDailyTasks, taskForId, type DailyTask } from '../ut
 import { dueRepairCardsFor, repairCardsFor, repairTaskFor } from '../utils/repairSelectors'
 import { questionAnswer, questionMisconceptionLinks } from '../utils/questionConfig'
 import { repairStageForDiagnostics, selectAdaptiveQuestionPath } from '../utils/adaptiveQuestions'
+import { calibrationInsightsFor } from '../utils/confidenceCalibration'
 import {
   PROGRESS_V1_STORAGE_KEY,
   PROGRESS_V2_STORAGE_KEY,
@@ -187,6 +188,7 @@ export const useTrainerStore = defineStore('trainer', () => {
     const highConfidenceErrors = relevant.filter((attempt) => !attempt.correct && attempt.confidence === 'high').length
     return { skill, label, correct, total: relevant.length, accuracy: relevant.length ? Math.round((correct / relevant.length) * 100) : 0, highConfidenceErrors }
   }))
+  const confidenceInsights = computed(() => calibrationInsightsFor(progressState.value.attempts))
   const topicMastery = computed(() => {
     const coreTopics = ['Array', 'String', 'Hash Table', 'Linked List', 'Tree', 'Graph', 'Dynamic Programming', 'Heap']
     return coreTopics.map((topic) => {
@@ -721,7 +723,7 @@ export const useTrainerStore = defineStore('trainer', () => {
     answers, results, streak, bestStreak, progressState, progressRecovery, progressMigrationStatus, progressStorageError,
     currentProblemId, currentQuestionIndex, selectedAnswer, submitted, answerCorrect,
     firstTryCorrect, revealedHintCount, confidence, interactionState, problemComplete, filters, activeQuestions, currentProblem, currentQuestion, questionCount, availableProblems, matchingProblems,
-    totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, reasoningSkillStats, topicMastery, aiCoachEnabled, catalogSize: problems.length,
+    totalCorrect, accuracy, completedProblemIds, typeStats, formatStats, reasoningSkillStats, confidenceInsights, topicMastery, aiCoachEnabled, catalogSize: problems.length,
     todaySession, todayTasks, practiceConsistency, repairCards, dueRepairCards,
     startProblem, pickRandomProblemId, startRandomProblem, clearCurrentProblem, setGeneratedQuestions, submitAnswer, submitEvaluatedAnswer, submitInteraction, tryAgain,
     setInteractionState, revealNextHint, nextQuestion, resetProgress, exportProgressData, exportRecoveryData, importProgressData, recordProductEvent,

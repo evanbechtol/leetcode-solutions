@@ -563,12 +563,12 @@ Recommended initial model:
 
 ## Accounts and cross-device progress
 
-### Local identity migration — Planned
+### Local identity migration — Complete (browser-local scope)
 
-- Preserve the existing browser-only experience for users who do not want an account.
-- Add export and import before introducing authentication.
-- Define a versioned progress schema and migration tests.
-- Use stable attempt identifiers so local and remote records can be merged safely.
+- Preserve the existing browser-only experience for users who do not want an account. Complete.
+- Export and import are available before authentication. Complete.
+- A versioned progress schema and migration tests are in place. Complete.
+- Stable attempt identifiers support safe local import merging; reuse them for remote merging when synchronization is introduced. Complete for local progress.
 
 ### Accounts and synchronization — Planned
 
@@ -692,7 +692,7 @@ A format is complete only when:
 - [ ] Versioned proficiency model
 - [ ] Spaced-repetition queue
 - [ ] Targeted lesson remediation
-- [ ] Local progress export and import
+- [x] Local progress export and import
 
 ### Milestone F: coding and durable accounts
 
