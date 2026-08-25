@@ -11,6 +11,8 @@ describe('reviewed onboarding content', () => {
       'contract', 'data-structure', 'pattern', 'data-structure', 'time-complexity', 'space-complexity',
     ])
     expect(onboardingDecisions.every(({ question }) => question.options.length >= 2)).toBe(true)
+    expect(onboardingDecisions.every(({ problem }) => problem.description.length > 0)).toBe(true)
+    expect(onboardingDecisions.every(({ problem }) => problem.examples.every((example) => example.input.length > 0 && example.output.length > 0))).toBe(true)
   })
 
   it('keeps every authored track destination resolvable', () => {

@@ -116,10 +116,6 @@ function updateInteraction(response: { ready: boolean; correct: boolean; feedbac
 }
 
 async function start() {
-  if (store.progressState.learner.onboardingStatus !== 'complete') {
-    await router.push({ name: 'start' })
-    return
-  }
   aiHint.value = ''
   quizError.value = ''
   resetInteraction()
@@ -131,10 +127,6 @@ async function start() {
 watch(() => route.params.problemId, async (routeValue) => {
   if (routeValue === undefined) {
     store.clearCurrentProblem()
-    if (store.progressState.learner.onboardingStatus !== 'complete') {
-      await router.replace({ name: 'start' })
-      return
-    }
     document.title = 'Pathfinder — LeetCode Coach'
     return
   }
@@ -272,6 +264,11 @@ async function copySolution() {
               Choose focus <span v-if="activeFilterCount" class="filter-count ml-2">{{ activeFilterCount }}</span>
             </v-btn>
           </div>
+          <router-link v-if="store.progressState.learner.onboardingStatus !== 'complete'" :to="{ name: 'start' }" class="onboarding-invite mt-5">
+            <v-icon icon="mdi-signpost-outline" size="19" />
+            <span><strong>Not sure where to begin?</strong> Take a six-decision starting-point check.</span>
+            <v-icon icon="mdi-arrow-right" size="18" />
+          </router-link>
           <p class="match-note mt-5"><v-icon icon="mdi-shuffle-variant" size="18" />
             <template>{{ store.matchingProblems.length }} verified coaching paths match your focus</template>
           </p>

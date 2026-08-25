@@ -141,6 +141,27 @@ function restart() {
         <h1>{{ currentDecision.problem.title }}</h1>
         <p class="onboarding-problem-context">This is a reviewed decision from a guided problem. There is no penalty for choosing the option that seems most plausible.</p>
 
+        <v-card class="onboarding-problem-card pa-5 pa-md-6 mt-7">
+          <div class="onboarding-problem-card-header">
+            <div>
+              <span class="box-label">Problem statement</span>
+              <p>{{ currentDecision.problem.description }}</p>
+            </div>
+            <v-chip size="small" :class="`difficulty-${currentDecision.problem.difficulty.toLowerCase()}`">{{ currentDecision.problem.difficulty }}</v-chip>
+          </div>
+          <div class="onboarding-examples mt-5">
+            <div v-for="(example, index) in currentDecision.problem.examples" :key="`${example.input}-${example.output}`" class="onboarding-example">
+              <span class="box-label">Example {{ index + 1 }}</span>
+              <code><b>Input:</b> {{ example.input }}<br><b>Output:</b> {{ example.output }}</code>
+              <p v-if="example.explanation">{{ example.explanation }}</p>
+            </div>
+          </div>
+          <details v-if="currentDecision.problem.constraints.length" class="onboarding-constraints mt-5">
+            <summary>View constraints</summary>
+            <ul><li v-for="constraint in currentDecision.problem.constraints" :key="constraint">{{ constraint }}</li></ul>
+          </details>
+        </v-card>
+
         <v-card class="onboarding-question pa-6 pa-md-8 mt-7">
           <div class="question-type"><v-icon icon="mdi-lightbulb-on-outline" size="18" /> {{ currentDecision.question.type }}</div>
           <div v-if="currentDecision.question.teachingContext" class="teaching-context mt-5"><span>Before you answer</span><strong>{{ currentDecision.question.teachingContext.title }}</strong><p>{{ currentDecision.question.teachingContext.body }}</p></div>
