@@ -10,6 +10,7 @@ import App from './App.vue'
 import QuizView from './views/QuizView.vue'
 import ProfileView from './views/ProfileView.vue'
 import { installScrollPositionPersistence, loadScrollPosition } from './utils/scrollRestoration'
+import { preservesLessonSectionScroll } from './utils/lessonSectionNavigation'
 
 const vuetify = createVuetify({
   theme: {
@@ -31,6 +32,11 @@ const vuetify = createVuetify({
 const router = createRouter({
   history: createWebHashHistory(),
   scrollBehavior(to, from) {
+    if (preservesLessonSectionScroll(
+      { name: to.name, slug: to.params.slug, section: to.query.section },
+      { name: from.name, slug: from.params.slug, section: from.query.section },
+    )) return false
+
     if (from === START_LOCATION) {
       try {
         const savedPosition = loadScrollPosition(sessionStorage, to.fullPath)

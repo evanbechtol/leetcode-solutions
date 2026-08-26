@@ -10,6 +10,7 @@ import { COACHING_CONTENT_VERSION } from '../data/coaching/contentVersion'
 import { useTrainerStore } from '../stores/trainer'
 import { lessonSectionPath, lessonTocEntries } from '../utils/lessonToc'
 import { useReducedMotion } from '../composables/useReducedMotion'
+import { scrollTopBehavior, shouldShowScrollTopControl } from '../utils/scrollTopControl'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,6 +19,8 @@ const search = ref('')
 const category = ref<'All' | 'Data Structure' | 'Algorithmic Pattern'>('All')
 const copyStatus = ref('')
 const reducedMotion = useReducedMotion()
+const showScrollTopControl = ref(false)
+const pendingTocSection = ref<string | null>(null)
 const tocOpen = ref(true)
 const tocMedia = typeof window === 'undefined' ? null : window.matchMedia('(max-width: 650px)')
 
@@ -50,6 +53,7 @@ const lessonComplexityAssumptions = computed(() => lesson.value?.complexity
 
 watch(lesson, (current) => {
   if (current) store.recordLessonOpened(current.slug)
+  showScrollTopControl.value = false
 }, { immediate: true })
 
 function mentalModelParagraphs(model: string | string[]) {
@@ -68,9 +72,12 @@ function scrollToSection(section: string, smooth = false) {
 
 async function navigateToSection(section: string) {
   if (!lesson.value || !isKnownSection(section)) return
+  if (route.query.section === section) {
+    scrollToSection(section, true)
+    return
+  }
+  pendingTocSection.value = section
   await router.replace({ name: 'learn', params: { slug: lesson.value.slug }, query: { ...route.query, section } })
-  await nextTick()
-  scrollToSection(section, true)
 }
 
 function sectionUrl(section: string) {
@@ -102,11 +109,11 @@ async function copySectionLink(section: string) {
   }
 }
 
-async function scrollToLinkedSection() {
+async function scrollToLinkedSection(smooth = false) {
   const section = route.query.section
   if (!isKnownSection(section)) return
   await nextTick()
-  scrollToSection(section)
+  scrollToSection(section, smooth)
 }
 
 function syncTocForViewport() {
@@ -117,13 +124,30 @@ function updateTocOpen(event: Event) {
   tocOpen.value = (event.currentTarget as HTMLDetailsElement).open
 }
 
-watch(() => [lesson.value?.slug, route.query.section], () => { void scrollToLinkedSection() }, { flush: 'post' })
+function updateScrollTopControl() {
+  showScrollTopControl.value = Boolean(lesson.value) && shouldShowScrollTopControl(window.scrollY, window.innerHeight)
+}
+
+function scrollToLessonTop() {
+  window.scrollTo({ top: 0, left: 0, behavior: scrollTopBehavior(reducedMotion.value) })
+}
+
+watch(() => [lesson.value?.slug, route.query.section], () => {
+  const smooth = pendingTocSection.value === route.query.section
+  pendingTocSection.value = null
+  void scrollToLinkedSection(smooth)
+}, { flush: 'post' })
 onMounted(() => {
   syncTocForViewport()
   tocMedia?.addEventListener('change', syncTocForViewport)
+  updateScrollTopControl()
+  window.addEventListener('scroll', updateScrollTopControl, { passive: true })
   void scrollToLinkedSection()
 })
-onScopeDispose(() => tocMedia?.removeEventListener('change', syncTocForViewport))
+onScopeDispose(() => {
+  tocMedia?.removeEventListener('change', syncTocForViewport)
+  window.removeEventListener('scroll', updateScrollTopControl)
+})
 
 </script>
 
@@ -394,6 +418,20 @@ onScopeDispose(() => tocMedia?.removeEventListener('change', syncTocForViewport)
           <p class="sr-only" aria-live="polite">{{ copyStatus }}</p>
         </main>
       </div>
+      <transition name="scroll-top-control">
+        <v-tooltip v-if="showScrollTopControl" text="Back to top" location="start">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              class="lesson-scroll-top"
+              color="primary"
+              icon="mdi-arrow-up"
+              aria-label="Back to top of lesson"
+              @click="scrollToLessonTop"
+            />
+          </template>
+        </v-tooltip>
+      </transition>
     </template>
   </div>
 </template>
