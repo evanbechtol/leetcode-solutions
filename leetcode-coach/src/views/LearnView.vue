@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { lessons } from '../data/lessons'
 import { lessonVisualizationFor } from '../data/lessonVisualizations'
 import TreeDiagramNode from '../components/TreeDiagramNode.vue'
@@ -8,11 +8,18 @@ import IterationVisualizationQuestion from '../components/questions/IterationVis
 import ContentTrustDisclosure from '../components/ContentTrustDisclosure.vue'
 import { COACHING_CONTENT_VERSION } from '../data/coaching/contentVersion'
 import { useTrainerStore } from '../stores/trainer'
+import { lessonSectionPath, lessonTocEntries } from '../utils/lessonToc'
+import { useReducedMotion } from '../composables/useReducedMotion'
 
 const route = useRoute()
+const router = useRouter()
 const store = useTrainerStore()
 const search = ref('')
 const category = ref<'All' | 'Data Structure' | 'Algorithmic Pattern'>('All')
+const copyStatus = ref('')
+const reducedMotion = useReducedMotion()
+const tocOpen = ref(true)
+const tocMedia = typeof window === 'undefined' ? null : window.matchMedia('(max-width: 650px)')
 
 const lesson = computed(() => lessons.find((item) => item.slug === route.params.slug))
 const isRepairReview = computed(() => typeof route.query.repair === 'string')
@@ -32,6 +39,7 @@ const lessonVisualization = computed(() => {
   if (!lesson.value) return null
   return lessonVisualizationFor(lesson.value.slug)
 })
+const tableOfContents = computed(() => lesson.value ? lessonTocEntries(lesson.value, Boolean(lessonVisualization.value)) : [])
 const lessonTrack = computed(() => lesson.value ? store.mapForLesson(lesson.value.slug) : null)
 const practiceNode = computed(() => lessonTrack.value?.nodes.find((node) => node.problemId && node.status !== 'stable')
   ?? lessonTrack.value?.nodes.find((node) => node.problemId)
@@ -47,6 +55,75 @@ watch(lesson, (current) => {
 function mentalModelParagraphs(model: string | string[]) {
   return Array.isArray(model) ? model : [model]
 }
+
+function isKnownSection(section: unknown): section is string {
+  return typeof section === 'string' && tableOfContents.value.some(({ id }) => id === section)
+}
+
+function scrollToSection(section: string, smooth = false) {
+  const target = document.getElementById(section)
+  if (!target) return
+  target.scrollIntoView({ behavior: smooth && !reducedMotion.value ? 'smooth' : 'auto', block: 'start' })
+}
+
+async function navigateToSection(section: string) {
+  if (!lesson.value || !isKnownSection(section)) return
+  await router.replace({ name: 'learn', params: { slug: lesson.value.slug }, query: { ...route.query, section } })
+  await nextTick()
+  scrollToSection(section, true)
+}
+
+function sectionUrl(section: string) {
+  if (!lesson.value) return ''
+  const href = router.resolve({ path: lessonSectionPath(lesson.value.slug, section) }).href
+  return new URL(href, window.location.href).href
+}
+
+async function copySectionLink(section: string) {
+  copyStatus.value = ''
+  const url = sectionUrl(section)
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url)
+    else {
+      const field = document.createElement('textarea')
+      field.value = url
+      field.setAttribute('readonly', '')
+      field.style.position = 'fixed'
+      field.style.opacity = '0'
+      document.body.appendChild(field)
+      field.select()
+      const copied = document.execCommand('copy')
+      field.remove()
+      if (!copied) throw new Error('Clipboard unavailable')
+    }
+    copyStatus.value = 'Section link copied.'
+  } catch {
+    copyStatus.value = 'Pathfinder could not copy this section link.'
+  }
+}
+
+async function scrollToLinkedSection() {
+  const section = route.query.section
+  if (!isKnownSection(section)) return
+  await nextTick()
+  scrollToSection(section)
+}
+
+function syncTocForViewport() {
+  tocOpen.value = !(tocMedia?.matches ?? false)
+}
+
+function updateTocOpen(event: Event) {
+  tocOpen.value = (event.currentTarget as HTMLDetailsElement).open
+}
+
+watch(() => [lesson.value?.slug, route.query.section], () => { void scrollToLinkedSection() }, { flush: 'post' })
+onMounted(() => {
+  syncTocForViewport()
+  tocMedia?.addEventListener('change', syncTocForViewport)
+  void scrollToLinkedSection()
+})
+onScopeDispose(() => tocMedia?.removeEventListener('change', syncTocForViewport))
 
 </script>
 
@@ -136,6 +213,17 @@ function mentalModelParagraphs(model: string | string[]) {
             <p class="reader-summary">{{ lesson.summary }}</p>
           </header>
 
+          <nav class="lesson-toc" aria-label="Table of contents">
+            <details :open="tocOpen" @toggle="updateTocOpen">
+              <summary>On this page <v-icon icon="mdi-chevron-down" size="18" /></summary>
+              <ol>
+                <li v-for="entry in tableOfContents" :key="entry.id" :class="`toc-level-${entry.level}`">
+                  <a :href="router.resolve({ name: 'learn', params: { slug: lesson.slug }, query: { ...route.query, section: entry.id } }).href" @click.prevent="navigateToSection(entry.id)">{{ entry.title }}</a>
+                </li>
+              </ol>
+            </details>
+          </nav>
+
           <ContentTrustDisclosure
             class="mt-5"
             :content-version="COACHING_CONTENT_VERSION"
@@ -148,8 +236,8 @@ function mentalModelParagraphs(model: string | string[]) {
             <template #append><v-btn size="small" variant="text" to="/profile">Back to Error Atlas</v-btn></template>
           </v-alert>
 
-          <section class="lesson-section mental-model">
-            <div class="section-heading-row"><span>01</span><div><div class="eyebrow">Mental model</div><h2>Make it intuitive</h2></div></div>
+          <section id="mental-model" class="lesson-section mental-model">
+            <div class="section-heading-row"><span>01</span><div><div class="eyebrow">Mental model</div><h2><button class="section-link" type="button" @click="copySectionLink('mental-model')">Make it intuitive <v-icon icon="mdi-link-variant" size="19" /></button></h2></div></div>
             <div class="mental-model-copy" :class="{ segmented: mentalModelParagraphs(lesson.mentalModel).length > 1 }">
               <p v-for="(paragraph, index) in mentalModelParagraphs(lesson.mentalModel)" :key="paragraph">
                 <span v-if="mentalModelParagraphs(lesson.mentalModel).length > 1" class="mental-block-marker">{{ String(index + 1).padStart(2, '0') }}</span>
@@ -158,8 +246,8 @@ function mentalModelParagraphs(model: string | string[]) {
             </div>
           </section>
 
-          <section v-if="lesson.deepDive" class="lesson-section deep-dive-section">
-            <div class="section-heading-row"><span>01A</span><div><div class="eyebrow">Foundations</div><h2>{{ lesson.deepDive.title }}</h2></div></div>
+          <section v-if="lesson.deepDive" id="foundations" class="lesson-section deep-dive-section">
+            <div class="section-heading-row"><span>01A</span><div><div class="eyebrow">Foundations</div><h2><button class="section-link" type="button" @click="copySectionLink('foundations')">{{ lesson.deepDive.title }} <v-icon icon="mdi-link-variant" size="19" /></button></h2></div></div>
 
             <div class="deep-introduction">
               <p v-for="paragraph in lesson.deepDive.introduction" :key="paragraph">{{ paragraph }}</p>
@@ -187,12 +275,12 @@ function mentalModelParagraphs(model: string | string[]) {
               <p>{{ lesson.deepDive.diagram.caption }}</p>
             </article>
 
-            <div class="deep-subheading"><div class="eyebrow">Language of trees</div><h3>Core vocabulary</h3></div>
+            <div id="core-vocabulary" class="deep-subheading"><div class="eyebrow">Language of trees</div><h3><button class="section-link" type="button" @click="copySectionLink('core-vocabulary')">Core vocabulary <v-icon icon="mdi-link-variant" size="17" /></button></h3></div>
             <div class="tree-vocabulary">
               <article v-for="item in lesson.deepDive.vocabulary" :key="item.term"><strong>{{ item.term }}</strong><p>{{ item.definition }}</p></article>
             </div>
 
-            <div class="deep-subheading"><div class="eyebrow">Representation</div><h3>How the idea appears in code</h3><p>Recognize both the conceptual model and the concrete form a problem uses to give it to you.</p></div>
+            <div id="representations" class="deep-subheading"><div class="eyebrow">Representation</div><h3><button class="section-link" type="button" @click="copySectionLink('representations')">How the idea appears in code <v-icon icon="mdi-link-variant" size="17" /></button></h3><p>Recognize both the conceptual model and the concrete form a problem uses to give it to you.</p></div>
             <div class="representation-list">
               <article v-for="(item, index) in lesson.deepDive.representations" :key="item.title" class="representation-card">
                 <div class="representation-copy"><span>{{ String(index + 1).padStart(2, '0') }}</span><h4>{{ item.title }}</h4><small>{{ item.bestFor }}</small><p>{{ item.description }}</p></div>
@@ -200,7 +288,7 @@ function mentalModelParagraphs(model: string | string[]) {
               </article>
             </div>
 
-            <div class="deep-subheading"><div class="eyebrow">Core algorithms</div><h3>How to explore a tree</h3><p>Every full traversal visits the same nodes. The frontier data structure and visit order determine what information becomes available first.</p></div>
+            <div id="tree-algorithms" class="deep-subheading"><div class="eyebrow">Core algorithms</div><h3><button class="section-link" type="button" @click="copySectionLink('tree-algorithms')">How to explore a tree <v-icon icon="mdi-link-variant" size="17" /></button></h3><p>Every full traversal visits the same nodes. The frontier data structure and visit order determine what information becomes available first.</p></div>
             <div class="tree-algorithm-list">
               <article v-for="(algorithm, index) in lesson.deepDive.algorithms" :key="algorithm.title" class="tree-algorithm-card">
                 <header><span>{{ String(index + 1).padStart(2, '0') }}</span><div><small>{{ algorithm.label }}</small><h4>{{ algorithm.title }}</h4></div></header>
@@ -214,8 +302,8 @@ function mentalModelParagraphs(model: string | string[]) {
             </div>
           </section>
 
-          <section class="lesson-section">
-            <div class="section-heading-row"><span>02</span><div><div class="eyebrow">Recognition</div><h2>Know when to reach for it</h2></div></div>
+          <section id="recognition" class="lesson-section">
+            <div class="section-heading-row"><span>02</span><div><div class="eyebrow">Recognition</div><h2><button class="section-link" type="button" @click="copySectionLink('recognition')">Know when to reach for it <v-icon icon="mdi-link-variant" size="19" /></button></h2></div></div>
             <div class="recognition-grid">
               <article class="content-panel signal-panel">
                 <h3><v-icon icon="mdi-radar" size="19" /> Signals in the prompt</h3>
@@ -228,8 +316,8 @@ function mentalModelParagraphs(model: string | string[]) {
             </div>
           </section>
 
-          <section class="lesson-section">
-            <div class="section-heading-row"><span>03</span><div><div class="eyebrow">Illustration</div><h2>{{ lesson.walkthrough.title }}</h2></div></div>
+          <section id="walkthrough" class="lesson-section">
+            <div class="section-heading-row"><span>03</span><div><div class="eyebrow">Illustration</div><h2><button class="section-link" type="button" @click="copySectionLink('walkthrough')">{{ lesson.walkthrough.title }} <v-icon icon="mdi-link-variant" size="19" /></button></h2></div></div>
             <div class="walkthrough">
               <div class="walkthrough-input"><span>Input</span><code>{{ lesson.walkthrough.input }}</code></div>
               <article v-for="(frame, index) in lesson.walkthrough.frames" :key="frame.label" class="walk-frame">
@@ -249,8 +337,8 @@ function mentalModelParagraphs(model: string | string[]) {
             </div>
           </section>
 
-          <section v-if="lessonVisualization" class="lesson-section lesson-execution-section">
-            <div class="section-heading-row"><span>03A</span><div><div class="eyebrow">Interactive execution</div><h2>Watch every value change</h2></div></div>
+          <section v-if="lessonVisualization" id="interactive-execution" class="lesson-section lesson-execution-section">
+            <div class="section-heading-row"><span>03A</span><div><div class="eyebrow">Interactive execution</div><h2><button class="section-link" type="button" @click="copySectionLink('interactive-execution')">Watch every value change <v-icon icon="mdi-link-variant" size="19" /></button></h2></div></div>
             <div class="lesson-execution-intro">
               <div><span>Representative problem</span><strong>{{ lessonVisualization.problem.title }}</strong></div>
               <p>Run the canonical algorithm one step at a time. Follow its concrete input elements, data structures, variables, active code, and output.</p>
@@ -263,8 +351,8 @@ function mentalModelParagraphs(model: string | string[]) {
             />
           </section>
 
-          <section class="lesson-section">
-            <div class="section-heading-row"><span>04</span><div><div class="eyebrow">Analysis</div><h2>Complexity & tradeoffs</h2></div></div>
+          <section id="complexity" class="lesson-section">
+            <div class="section-heading-row"><span>04</span><div><div class="eyebrow">Analysis</div><h2><button class="section-link" type="button" @click="copySectionLink('complexity')">Complexity & tradeoffs <v-icon icon="mdi-link-variant" size="19" /></button></h2></div></div>
             <div class="complexity-table">
               <div class="complexity-head"><span>Operation</span><span>Time</span><span>Space</span><span>Why</span></div>
               <div v-for="row in lesson.complexity" :key="row.operation" class="complexity-row">
@@ -273,18 +361,18 @@ function mentalModelParagraphs(model: string | string[]) {
             </div>
           </section>
 
-          <section class="lesson-section">
-            <div class="section-heading-row"><span>05</span><div><div class="eyebrow">Method</div><h2>A repeatable recipe</h2></div></div>
+          <section id="recipe" class="lesson-section">
+            <div class="section-heading-row"><span>05</span><div><div class="eyebrow">Method</div><h2><button class="section-link" type="button" @click="copySectionLink('recipe')">A repeatable recipe <v-icon icon="mdi-link-variant" size="19" /></button></h2></div></div>
             <ol class="recipe-list"><li v-for="(step, index) in lesson.steps" :key="step"><span>{{ index + 1 }}</span><p>{{ step }}</p></li></ol>
           </section>
 
-          <section class="lesson-section">
-            <div class="section-heading-row"><span>06</span><div><div class="eyebrow">Reference implementation</div><h2>See the pattern in code</h2></div></div>
+          <section id="reference-implementation" class="lesson-section">
+            <div class="section-heading-row"><span>06</span><div><div class="eyebrow">Reference implementation</div><h2><button class="section-link" type="button" @click="copySectionLink('reference-implementation')">See the pattern in code <v-icon icon="mdi-link-variant" size="19" /></button></h2></div></div>
             <div class="lesson-code"><div><span></span><span></span><span></span><small>TypeScript</small></div><pre><code>{{ lesson.code }}</code></pre></div>
           </section>
 
-          <section class="lesson-section">
-            <div class="section-heading-row"><span>07</span><div><div class="eyebrow">Judgment</div><h2>Boundaries & common mistakes</h2></div></div>
+          <section id="boundaries" class="lesson-section">
+            <div class="section-heading-row"><span>07</span><div><div class="eyebrow">Judgment</div><h2><button class="section-link" type="button" @click="copySectionLink('boundaries')">Boundaries & common mistakes <v-icon icon="mdi-link-variant" size="19" /></button></h2></div></div>
             <div class="pitfall-grid">
               <article><h3><v-icon icon="mdi-cancel" size="19" /> Choose another tool when…</h3><ul><li v-for="item in lesson.avoidWhen" :key="item">{{ item }}</li></ul></article>
               <article><h3><v-icon icon="mdi-alert-outline" size="19" /> Watch out for…</h3><ul><li v-for="item in lesson.pitfalls" :key="item">{{ item }}</li></ul></article>
@@ -303,6 +391,7 @@ function mentalModelParagraphs(model: string | string[]) {
             <span v-else />
             <router-link v-if="nextLesson" :to="`/learn/${nextLesson.slug}`" class="next"><small>Next up</small><strong>{{ nextLesson.title }} <v-icon icon="mdi-arrow-right" size="17" /></strong></router-link>
           </nav>
+          <p class="sr-only" aria-live="polite">{{ copyStatus }}</p>
         </main>
       </div>
     </template>
