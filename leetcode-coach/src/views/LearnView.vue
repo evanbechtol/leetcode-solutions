@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { lessons } from '../data/lessons'
+import { deepDiveLabels } from '../data/deepDiveLabels'
 import { lessonVisualizationFor } from '../data/lessonVisualizations'
 import TreeDiagramNode from '../components/TreeDiagramNode.vue'
 import IterationVisualizationQuestion from '../components/questions/IterationVisualizationQuestion.vue'
@@ -299,7 +300,7 @@ onScopeDispose(() => {
               <p>{{ lesson.deepDive.diagram.caption }}</p>
             </article>
 
-            <div id="core-vocabulary" class="deep-subheading"><div class="eyebrow">Language of trees</div><h3><button class="section-link" type="button" @click="copySectionLink('core-vocabulary')">Core vocabulary <v-icon icon="mdi-link-variant" size="17" /></button></h3></div>
+            <div id="core-vocabulary" class="deep-subheading"><div class="eyebrow">{{ deepDiveLabels.vocabularyEyebrow }}</div><h3><button class="section-link" type="button" @click="copySectionLink('core-vocabulary')">{{ deepDiveLabels.vocabularyHeading }} <v-icon icon="mdi-link-variant" size="17" /></button></h3></div>
             <div class="tree-vocabulary">
               <article v-for="item in lesson.deepDive.vocabulary" :key="item.term"><strong>{{ item.term }}</strong><p>{{ item.definition }}</p></article>
             </div>
@@ -312,14 +313,14 @@ onScopeDispose(() => {
               </article>
             </div>
 
-            <div id="tree-algorithms" class="deep-subheading"><div class="eyebrow">Core algorithms</div><h3><button class="section-link" type="button" @click="copySectionLink('tree-algorithms')">How to explore a tree <v-icon icon="mdi-link-variant" size="17" /></button></h3><p>Every full traversal visits the same nodes. The frontier data structure and visit order determine what information becomes available first.</p></div>
+            <div id="tree-algorithms" class="deep-subheading"><div class="eyebrow">{{ deepDiveLabels.techniquesEyebrow }}</div><h3><button class="section-link" type="button" @click="copySectionLink('tree-algorithms')">{{ deepDiveLabels.techniquesHeading }} <v-icon icon="mdi-link-variant" size="17" /></button></h3><p>{{ deepDiveLabels.techniquesDescription }}</p></div>
             <div class="tree-algorithm-list">
               <article v-for="(algorithm, index) in lesson.deepDive.algorithms" :key="algorithm.title" class="tree-algorithm-card">
                 <header><span>{{ String(index + 1).padStart(2, '0') }}</span><div><small>{{ algorithm.label }}</small><h4>{{ algorithm.title }}</h4></div></header>
                 <p class="algorithm-summary">{{ algorithm.summary }}</p>
                 <div v-if="algorithm.invariant" class="algorithm-invariant"><strong>Invariant</strong><p>{{ algorithm.invariant }}</p></div>
                 <div class="algorithm-use"><strong>Reach for it when</strong><p>{{ algorithm.useWhen }}</p></div>
-                <div class="algorithm-example"><strong>Trace on the example tree</strong><ol><li v-for="step in algorithm.example" :key="step">{{ step }}</li></ol></div>
+                <div class="algorithm-example"><strong>{{ deepDiveLabels.exampleTraceHeading }}</strong><ol><li v-for="step in algorithm.example" :key="step">{{ step }}</li></ol></div>
                 <div class="algorithm-code"><div>TypeScript</div><pre><code>{{ algorithm.code }}</code></pre></div>
                 <footer><v-icon icon="mdi-chart-timeline-variant" size="17" /><span>{{ algorithm.complexity }}</span></footer>
               </article>

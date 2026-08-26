@@ -1,4 +1,5 @@
 import type { Lesson } from '../data/lessons'
+import { deepDiveLabels } from '../data/deepDiveLabels'
 
 export interface LessonTocEntry {
   id: string
@@ -24,9 +25,9 @@ export function lessonTocEntries(lesson: Lesson, hasInteractiveExecution: boolea
   if (lesson.deepDive) {
     entries.splice(walkthroughIndex, 0,
       { id: 'foundations', title: lesson.deepDive.title, level: 2 },
-      { id: 'core-vocabulary', title: 'Core vocabulary', level: 3 },
+      { id: 'core-vocabulary', title: deepDiveLabels.vocabularyHeading, level: 3 },
       { id: 'representations', title: 'How the idea appears in code', level: 3 },
-      { id: 'tree-algorithms', title: 'How to explore a tree', level: 3 },
+      { id: 'tree-algorithms', title: deepDiveLabels.techniquesHeading, level: 3 },
     )
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { lessons } from '../data/lessons'
+import { deepDiveLabels } from '../data/deepDiveLabels'
 import { lessonSectionPath, lessonTocEntries } from './lessonToc'
 
 describe('lesson table of contents', () => {
@@ -15,16 +16,17 @@ describe('lesson table of contents', () => {
     expect(new Set(entries.map(({ id }) => id)).size).toBe(entries.length)
   })
 
-  it('adds the authored Foundations subsections only when that lesson has a deep dive', () => {
-    const lesson = lessons.find(({ slug }) => slug === 'trees')!
-    const entries = lessonTocEntries(lesson, true)
+  it('uses neutral shared Foundations subsections for every lesson with a deep dive', () => {
+    for (const lesson of lessons.filter((item) => item.deepDive)) {
+      expect(lessonTocEntries(lesson, true)).toEqual(expect.arrayContaining([
+        { id: 'foundations', title: lesson.deepDive!.title, level: 2 },
+        { id: 'core-vocabulary', title: deepDiveLabels.vocabularyHeading, level: 3 },
+        { id: 'representations', title: 'How the idea appears in code', level: 3 },
+        { id: 'tree-algorithms', title: deepDiveLabels.techniquesHeading, level: 3 },
+      ]))
+    }
 
-    expect(entries).toEqual(expect.arrayContaining([
-      { id: 'foundations', title: lesson.deepDive!.title, level: 2 },
-      { id: 'core-vocabulary', title: 'Core vocabulary', level: 3 },
-      { id: 'representations', title: 'How the idea appears in code', level: 3 },
-      { id: 'tree-algorithms', title: 'How to explore a tree', level: 3 },
-    ]))
+    expect(Object.values(deepDiveLabels).join(' ').toLowerCase()).not.toContain('tree')
   })
 
   it('omits unavailable interactive execution and creates a shareable section path', () => {
