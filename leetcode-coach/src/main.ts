@@ -1,6 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, START_LOCATION } from 'vue-router'
 import { createVuetify } from 'vuetify'
 import { aliases, mdi } from 'vuetify/iconsets/mdi'
 import '@mdi/font/css/materialdesignicons.css'
@@ -9,6 +9,7 @@ import './styles/main.scss'
 import App from './App.vue'
 import QuizView from './views/QuizView.vue'
 import ProfileView from './views/ProfileView.vue'
+import { installScrollPositionPersistence, loadScrollPosition } from './utils/scrollRestoration'
 
 const vuetify = createVuetify({
   theme: {
@@ -29,7 +30,16 @@ const vuetify = createVuetify({
 
 const router = createRouter({
   history: createWebHashHistory(),
-  scrollBehavior() {
+  scrollBehavior(to, from) {
+    if (from === START_LOCATION) {
+      try {
+        const savedPosition = loadScrollPosition(sessionStorage, to.fullPath)
+        if (savedPosition) return savedPosition
+      } catch {
+        // Storage may be disabled; start at the top as usual.
+      }
+    }
+
     return { left: 0, top: 0 }
   },
   routes: [
@@ -54,4 +64,5 @@ const router = createRouter({
   ],
 })
 
+installScrollPositionPersistence()
 createApp(App).use(createPinia()).use(router).use(vuetify).mount('#app')

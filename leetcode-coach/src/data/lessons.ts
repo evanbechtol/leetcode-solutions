@@ -500,8 +500,8 @@ export const lessons: Lesson[] = [
     complexity: [{ operation: 'Binary search', time: 'O(log n)', space: 'O(1)', note: 'Each decision halves the candidate interval.' }],
     steps: ['Define inclusive or half-open boundaries and never mix conventions.', 'Write the monotonic predicate in one sentence.', 'Compute mid without overflowing.', 'On equality or feasibility, decide whether to return or keep searching for a boundary.'],
     walkthrough: { title: 'Find 9', input: '[-1, 0, 3, 5, 9, 12]', frames: [
-      { label: 'mid = 3', values: ['-1', '0', '3', '5', '9', '12'], active: [2], note: '3 < 9, so indexes 0–2 cannot contain the target.' },
-      { label: 'mid = 4', values: ['5', '9', '12'], active: [1], settled: [0], note: '9 matches. Only two comparisons were needed.' },
+      { label: 'mid index = 2 (value 3)', values: ['-1', '0', '3', '5', '9', '12'], active: [2], note: 'nums[2] = 3 < 9, so indices 0–2 cannot contain the target.' },
+      { label: 'mid index = 4 (value 9)', values: ['5', '9', '12'], active: [1], settled: [0], note: 'nums[4] = 9 matches the target. Only two comparisons were needed.' },
     ] },
     code: `function search(nums: number[], target: number): number {
   let left = 0, right = nums.length - 1

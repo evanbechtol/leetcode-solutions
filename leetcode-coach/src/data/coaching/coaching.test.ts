@@ -10,6 +10,15 @@ import { lessonVisualizationFor, lessonVisualizationProblemIds } from '../lesson
 import { buildExactExecutionTrace } from './exactExecutionTraces'
 
 describe('deterministic coaching catalog', () => {
+  it('keeps the binary-search illustration midpoint indices and values unambiguous', () => {
+    const binarySearch = lessons.find(({ slug }) => slug === 'binary-search')!
+
+    expect(binarySearch.walkthrough.frames).toMatchObject([
+      { label: 'mid index = 2 (value 3)', active: [2], note: expect.stringContaining('nums[2] = 3 < 9') },
+      { label: 'mid index = 4 (value 9)', active: [1], note: expect.stringContaining('nums[4] = 9') },
+    ])
+  })
+
   it('covers all 134 dataset problems plus two curated-only problems', () => {
     expect(Object.keys(problemTeachingFacts)).toHaveLength(136)
     expect(validateCoachingContent(problems)).toEqual([])
