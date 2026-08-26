@@ -206,6 +206,10 @@ async function generateQuiz() {
     quizError.value = 'AI-generated lessons are disabled in this development mode.'
     return
   }
+  if (!navigator.onLine) {
+    quizError.value = 'This experimental AI lesson requires a network connection. Reviewed deterministic lessons and practice remain available offline.'
+    return
+  }
   quizLoading.value = true
   quizError.value = ''
   try {
@@ -263,6 +267,7 @@ async function checkAnswer() {
   }
   hintLoading.value = true
   try {
+    if (!navigator.onLine) throw new Error('Network unavailable')
     const endpoint = import.meta.env.VITE_HINT_API_URL || 'http://localhost:8787/api/hint'
     const response = await fetch(endpoint, {
       method: 'POST',

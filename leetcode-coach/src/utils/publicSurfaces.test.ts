@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import appSource from '../App.vue?raw'
 import feedbackSource from '../components/FeedbackDialog.vue?raw'
+import pwaStatusSource from '../components/PwaStatus.vue?raw'
 import trustSource from '../components/ContentTrustDisclosure.vue?raw'
 import routerSource from '../main.ts?raw'
 import { publicInformation } from '../data/publicInformation'
@@ -28,5 +29,16 @@ describe('public MVP surfaces', () => {
     expect(trustSource).toContain('<summary>')
     expect(trustSource).toContain('Exact reviewed trace')
     expect(trustSource).toContain('Instructional overview')
+  })
+
+  it('keeps PWA installation, connectivity, and updates explicit and user-controlled', () => {
+    expect(appSource).toContain('Install Pathfinder')
+    expect(appSource).toContain('Update available')
+    expect(pwaStatusSource).toContain('aria-live="polite"')
+    expect(pwaStatusSource).toContain('You’re offline')
+    expect(pwaStatusSource).toContain('Update now')
+    expect(pwaStatusSource).toContain('Later')
+    expect(pwaStatusSource).toContain('Close installation instructions')
+    expect(feedbackSource).toContain('Pathfinder can still copy this report')
   })
 })

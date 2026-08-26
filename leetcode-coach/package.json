@@ -1,7 +1,7 @@
 {
   "name": "leetcode-coach",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,11 +12,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "content:validate": "vitest run src/data/coaching/coaching.test.ts",
-    "build": "vitest run src/data/coaching/coaching.test.ts && vue-tsc --noEmit && vite build",
+    "build": "vitest run src/data/coaching/coaching.test.ts && vue-tsc --noEmit && vite build && npm run pwa:verify",
+    "pwa:verify": "node scripts/verify-pwa-build.mjs",
+    "test:pwa": "npm run build && playwright test",
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
+    "@fontsource/dm-mono": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
     "@mdi/font": "^7.4.47",
     "highlight.js": "^11.12.0",
     "openai": "^5.20.1",
@@ -26,11 +30,13 @@
     "vuetify": "^3.9.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@vitejs/plugin-vue": "^6.0.1",
     "gh-pages": "^6.3.0",
     "sass-embedded": "^1.89.2",
     "typescript": "~5.8.3",
     "vite": "^7.1.2",
+    "vite-plugin-pwa": "^1.3.0",
     "vite-plugin-vuetify": "^2.1.1",
     "vitest": "^4.1.11",
     "vue-tsc": "^3.0.5"

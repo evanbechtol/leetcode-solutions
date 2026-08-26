@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Pathfinder maskable icon</title>
+  <description id="description">A mint route connecting amber, violet, and mint waypoints on a dark field.</description>
+  <rect width="512" height="512" fill="#111318"/>
+  <path d="M111 376 199 278l75 46 127-179" fill="none" stroke="#8DE5B2" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="111" cy="376" r="38" fill="#FFCC73" stroke="#111318" stroke-width="16"/>
+  <circle cx="274" cy="324" r="34" fill="#B9A7FF" stroke="#111318" stroke-width="16"/>
+  <circle cx="401" cy="145" r="38" fill="#8DE5B2" stroke="#111318" stroke-width="16"/>
+</svg>

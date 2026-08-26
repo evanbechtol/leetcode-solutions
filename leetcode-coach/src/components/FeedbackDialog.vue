@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { publicReleaseConfig } from '../config/publicRelease'
+import { usePwa } from '../composables/usePwa'
 import { useTrainerStore } from '../stores/trainer'
 import {
   MAX_FEEDBACK_MESSAGE_LENGTH,
@@ -15,12 +16,14 @@ import {
 const open = defineModel<boolean>({ required: true })
 const route = useRoute()
 const store = useTrainerStore()
+const pwa = usePwa()
 const message = ref(loadFeedbackDraft().message)
 const lastSavedMessage = ref(message.value)
 const includeDiagnostics = ref(false)
 const status = ref('')
 const error = ref('')
 const feedbackRoute = ref(route.fullPath)
+const canOpenFeedbackSite = computed(() => Boolean(publicReleaseConfig.feedbackUrl) && pwa.isOnline.value)
 
 const report = computed(() => formatFeedbackReport({
   message: message.value,
@@ -78,10 +81,10 @@ async function submitFeedback() {
     clearFeedbackDraft()
     message.value = ''
     lastSavedMessage.value = ''
-    status.value = publicReleaseConfig.feedbackUrl
+    status.value = canOpenFeedbackSite.value
       ? 'Feedback copied. The feedback site opened in a new tab; paste the report there when you are ready.'
       : 'Feedback copied. Nothing was transmitted by Pathfinder.'
-    if (publicReleaseConfig.feedbackUrl) {
+    if (canOpenFeedbackSite.value && publicReleaseConfig.feedbackUrl) {
       window.open(publicReleaseConfig.feedbackUrl, '_blank', 'noopener,noreferrer')
       store.recordProductEvent('feedback_url_opened')
     }
@@ -119,6 +122,9 @@ async function submitFeedback() {
           <span>Include an aggregate diagnostic summary <small>(counts only; no answers, confidence, dates, or error details)</small></span>
         </template>
       </v-checkbox>
+      <v-alert v-if="publicReleaseConfig.feedbackUrl && !pwa.isOnline.value" class="mt-3" type="info" variant="tonal" density="compact">
+        You’re offline. Pathfinder can still copy this report, but it will not open the external feedback site.
+      </v-alert>
       <details class="feedback-preview mt-3">
         <summary>Preview the exact report</summary>
         <pre>{{ report }}</pre>
@@ -129,7 +135,7 @@ async function submitFeedback() {
       <div class="feedback-actions mt-6">
         <v-btn variant="text" @click="open = false">Keep draft and close</v-btn>
         <v-btn color="primary" prepend-icon="mdi-content-copy" :disabled="!message.trim()" @click="submitFeedback">
-          {{ publicReleaseConfig.feedbackUrl ? 'Copy and open feedback site' : 'Copy feedback' }}
+          {{ canOpenFeedbackSite ? 'Copy and open feedback site' : 'Copy feedback' }}
         </v-btn>
       </div>
     </v-card>

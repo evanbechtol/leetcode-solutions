@@ -2,9 +2,12 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTrainerStore } from './stores/trainer'
 import FeedbackDialog from './components/FeedbackDialog.vue'
+import PwaStatus from './components/PwaStatus.vue'
 import { publicReleaseConfig } from './config/publicRelease'
+import { usePwa } from './composables/usePwa'
 
 const store = useTrainerStore()
+const pwa = usePwa()
 const mobileNavOpen = ref(false)
 const feedbackOpen = ref(false)
 let recordedRuntimeError = false
@@ -25,11 +28,13 @@ function recordRuntimeError() {
 }
 
 onMounted(() => {
+  pwa.start()
   window.addEventListener('error', recordRuntimeError)
   window.addEventListener('unhandledrejection', recordRuntimeError)
 })
 
 onBeforeUnmount(() => {
+  pwa.stop()
   window.removeEventListener('error', recordRuntimeError)
   window.removeEventListener('unhandledrejection', recordRuntimeError)
 })
@@ -67,9 +72,26 @@ onBeforeUnmount(() => {
           <v-icon icon="mdi-chevron-right" size="20" />
         </router-link>
       </nav>
-      <div class="mobile-nav-footer">All progress stays on this device.</div>
+      <div class="mobile-nav-footer">
+        <v-btn
+          v-if="pwa.updateAvailable.value"
+          block
+          variant="tonal"
+          prepend-icon="mdi-update"
+          @click="pwa.showUpdatePrompt"
+        >Update available</v-btn>
+        <v-btn
+          v-if="pwa.showInstallAction.value"
+          block
+          variant="outlined"
+          prepend-icon="mdi-monitor-arrow-down-variant"
+          @click="pwa.requestInstall"
+        >Install Pathfinder</v-btn>
+        <small>All progress stays on this device.</small>
+      </div>
     </v-navigation-drawer>
     <v-main>
+      <PwaStatus />
       <v-banner v-if="publicReleaseConfig.betaEnabled" class="beta-banner" icon="mdi-flask-outline" lines="one">
         Pathfinder public beta · Learning data stays in this browser.
         <template #actions><v-btn size="small" variant="text" @click="feedbackOpen = true">Give feedback</v-btn></template>
@@ -86,7 +108,11 @@ onBeforeUnmount(() => {
           <router-link to="/changelog">Changelog</router-link>
           <router-link to="/data">Your data</router-link>
         </nav>
-        <v-btn variant="outlined" prepend-icon="mdi-message-text-outline" @click="feedbackOpen = true">Give feedback</v-btn>
+        <div class="app-footer-actions">
+          <v-btn v-if="pwa.updateAvailable.value" variant="text" prepend-icon="mdi-update" @click="pwa.showUpdatePrompt">Update</v-btn>
+          <v-btn v-if="pwa.showInstallAction.value" variant="text" prepend-icon="mdi-monitor-arrow-down-variant" @click="pwa.requestInstall">Install</v-btn>
+          <v-btn variant="outlined" prepend-icon="mdi-message-text-outline" @click="feedbackOpen = true">Give feedback</v-btn>
+        </div>
       </div>
     </footer>
     <FeedbackDialog v-model="feedbackOpen" />

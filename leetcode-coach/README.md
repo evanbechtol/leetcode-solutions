@@ -36,6 +36,23 @@ The browser never receives the API key. Current static coaching paths deliberate
 
 Create a production build with `npm run build`; the output is written to `dist/`.
 
+## Install and use offline
+
+The production build is an installable progressive web application. After the first successful visit, Pathfinder downloads the complete reviewed learning experience—including lazy-loaded routes and locally hosted fonts—and announces when it is ready offline. Supporting browsers expose an **Install** action; Safari users can use **Add to Home Screen** or **Add to Dock** from the browser menu.
+
+When a new release is ready, Pathfinder asks before refreshing so an active coaching session is not interrupted. Choosing **Later** leaves an update action in the footer and mobile navigation. Application updates replace only public cached code and content; progress, active sessions, preferences, and feedback drafts remain in local storage.
+
+Deterministic coaching, lessons, traces, browsing, progress, and backup/restore work offline. Optional AI development endpoints and an external feedback destination remain network-only. Feedback can still be drafted and copied while offline.
+
+Service workers are disabled during `npm run dev`. To exercise the production PWA locally:
+
+```bash
+npm run build
+npm run preview -- --host 127.0.0.1 --port 4173
+```
+
+Run `npm run test:pwa` for the production-preview offline browser checks. Clearing browser site data removes both replaceable application caches and private local progress; download a backup first if the history matters.
+
 ## Public beta configuration
 
 The static public release can show a non-intrusive beta banner and open a public feedback destination. Both controls are browser-visible build-time configuration and must never contain secrets:
@@ -57,7 +74,7 @@ The Vite base path is relative and routing uses URL hashes, so the production bu
 npm run deploy
 ```
 
-Then configure the repository's Pages source to the `gh-pages` branch. Progress is intentionally device-local and stored in `localStorage`, so no account or backend is required.
+Then configure the repository's Pages source to the `gh-pages` branch. The manifest, service-worker scope, launch URL, and shortcuts are relative so installation continues to work from a repository subpath. Progress is intentionally device-local and stored in `localStorage`, so no account or backend is required.
 
 ## Content model
 
